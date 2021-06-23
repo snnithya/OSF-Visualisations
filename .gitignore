@@ -1,1 +1,3 @@
-Data/
+*/Data/
+*.ipynb_checkpoints/
+NIR*.pdf
