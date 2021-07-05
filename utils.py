@@ -57,7 +57,7 @@ def drawAnnotation(cyclePath, numDiv, startTime, endTime, ax, c='purple'):
             ax.annotate(vibhaag['Cycle'], (vibhaag['Time']-startTime, -0.4), bbox=dict(facecolor='grey', edgecolor='white'), c='white')
     return ax
 
-def pitchCountour(audioPath, startTime, endTime, minPitch, maxPitch, notes, tonic, timeStep=0.01, octaveJumpCost=0.9, veryAccurate=True, ax=None, noXlabels=10, annotate=False, cyclePath=None, numDiv=0, xticks=False, yticks=False):
+def pitchCountour(audioPath, startTime, endTime, minPitch, maxPitch, notes, tonic, timeStep=0.01, octaveJumpCost=0.9, veryAccurate=True, ax=None, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, xticks=False, yticks=False):
     '''Returns pitch contour for the audio file
 
     Uses `plotPitch` to plot pitch contour if ax is not None.
@@ -74,7 +74,7 @@ def pitchCountour(audioPath, startTime, endTime, minPitch, maxPitch, notes, toni
         octaveJumpCost: parameter passed to pitch detection function
         veryAccurate: parameter passed to pitch detection function
         ax: axis to plot the pitch contour in
-        noXlabels: number of labels to have on x axis; only used if ax is not None
+        freqXlabels: time (in seconds) after which each x label occurs
         annotate: if True, will annotate tala markings
         cyclePath: path to file with tala cycle annotations
         numDiv: number of divisions to put between each annotation marking
@@ -91,10 +91,10 @@ def pitchCountour(audioPath, startTime, endTime, minPitch, maxPitch, notes, toni
     pitch = snd.to_pitch_ac(time_step=timeStep, pitch_floor=minPitch, very_accurate=veryAccurate, octave_jump_cost=octaveJumpCost, pitch_ceiling=maxPitch)
     
     # plot the contour
-    if ax is not None:  return plotPitch(pitch, notes, ax, tonic, startTime, endTime, noXlabels, annotate=annotate, cyclePath=cyclePath, numDiv=numDiv, xticks=xticks, yticks=yticks)
+    if ax is not None:  return plotPitch(pitch, notes, ax, tonic, startTime, endTime, freqXlabels, annotate=annotate, cyclePath=cyclePath, numDiv=numDiv, xticks=xticks, yticks=yticks)
     else:   return pitch
 
-def plotPitch(pitch, notes, ax, tonic, startTime, endTime, noXlabels=10, xticks=True, yticks=True, annotate=False, cyclePath=None, numDiv=0, cAnnot='purple'):
+def plotPitch(pitch, notes, ax, tonic, startTime, endTime, freqXlabels=5, xticks=True, yticks=True, annotate=False, cyclePath=None, numDiv=0, cAnnot='purple'):
     '''Converts the pitch contour from Hz to Cents, and plots it
 
     Parameters
@@ -102,7 +102,7 @@ def plotPitch(pitch, notes, ax, tonic, startTime, endTime, noXlabels=10, xticks=
         notes: object for each note used for labelling y-axis
         ax: axis object on which plot is to be plotted
         tonic: tonic (in Hz) of audio clip
-        noXlabels: number of labels to print on the x axis
+        freqXlabels: time (in seconds) after which each x label occurs
         annotate: if true will mark taala markings 
         xticks: if True, will print x tick labels
         yticks: if True, will print y tick labels
@@ -119,8 +119,8 @@ def plotPitch(pitch, notes, ax, tonic, startTime, endTime, noXlabels=10, xticks=
     ylabel='Notes', 
     title='Pitch Contour (in Cents)', 
     xlim=(0, endTime-startTime), 
-    xticks=np.linspace(0, endTime-startTime, noXlabels), 
-    xticklabels=np.around(np.linspace(0, endTime-startTime, noXlabels), 2) + startTime if xticks else [],
+    xticks=np.arange(0, endTime-startTime, freqXlabels), 
+    xticklabels=np.around(np.arange(startTime, endTime, freqXlabels) )if xticks else [],
     yticks=[x['cents'] for x in notes if (x['cents'] >= min(yvals)) & (x['cents'] <= max(yvals))] if yticks else [], 
     yticklabels=[x['label'] for x in notes if (x['cents'] >= min(yvals)) & (x['cents'] <= max(yvals))] if yticks else [])
 
@@ -128,7 +128,7 @@ def plotPitch(pitch, notes, ax, tonic, startTime, endTime, noXlabels=10, xticks=
         ax = drawAnnotation(cyclePath, numDiv, startTime, endTime, ax, c=cAnnot)
     return ax
 
-def spectogram(audioPath, startTime, endTime, cmap, ax, amin=1e-5, noXlabels=10, xticks=False, yticks=False, annotate=False, cyclePath=None, numDiv=0, cAnnot='purple'):
+def spectogram(audioPath, startTime, endTime, cmap, ax, amin=1e-5, freqXlabels=5, xticks=False, yticks=False, annotate=False, cyclePath=None, numDiv=0, cAnnot='purple'):
     '''Plots spectogram
 
     Parameters
@@ -138,7 +138,7 @@ def spectogram(audioPath, startTime, endTime, cmap, ax, amin=1e-5, noXlabels=10,
         cmap: colormap to use to plot spectogram
         ax: axis to plot spectogram in
         amin: controls the contrast of the spectogram; passed into librosa.power_to_db function
-        noXlabels: number of Xlabels to print; only valid if xticks is true
+        freqXlabels: time (in seconds) after which each x label occurs
         xticks: if true, will print x labels
         yticks: if true, will print y labels
         annotate: if True, will annotate tala markings
@@ -162,8 +162,8 @@ def spectogram(audioPath, startTime, endTime, cmap, ax, amin=1e-5, noXlabels=10,
     xlabel='', 
     title='Spectogram',
     xlim=(0, endTime-startTime), 
-    xticks=np.linspace(0, endTime-startTime, noXlabels) if xticks else [], 
-    xticklabels=np.around(np.linspace(0, endTime-startTime, noXlabels), 2) if xticks else [],
+    xticks=np.arange(0, endTime-startTime, freqXlabels) if xticks else [], 
+    xticklabels=np.around(np.arange(startTime, endTime, freqXlabels)) if xticks else [],
     ylim=(0, 5000),
     yticks=[0, 2e3, 4e3] if yticks else [], 
     yticklabels=['0', '2k', '4k'] if yticks else [])
@@ -172,7 +172,7 @@ def spectogram(audioPath, startTime, endTime, cmap, ax, amin=1e-5, noXlabels=10,
         ax = drawAnnotation(cyclePath, numDiv, startTime, endTime, ax, c=cAnnot)
     return ax
 
-def drawWave(audioPath, startTime, endTime, ax, xticks=False, noXlabels=10, annotate=False, cyclePath=None, numDiv=0, cAnnot='purple'):
+def drawWave(audioPath, startTime, endTime, ax, xticks=False, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, cAnnot='purple'):
     '''Plots the wave plot of the audio
 
     audioPath: path to the audio file
@@ -180,7 +180,7 @@ def drawWave(audioPath, startTime, endTime, ax, xticks=False, noXlabels=10, anno
     endTime: time to stop reading the audio at
     ax: axis to plot waveplot in
     xticks: if True, will plot xticklabels
-    noXlabels: number of x labels to print, relevant only if xticks is True
+    freqXlabels: time (in seconds) after which each x label occurs
     annotate: if True, will annotate tala markings
     cyclePath: path to file with tala cycle annotations
     numDiv: number of divisions to put between each annotation marking
@@ -190,8 +190,8 @@ def drawWave(audioPath, startTime, endTime, ax, xticks=False, noXlabels=10, anno
     waveplot(audio, sr, ax=ax)
     ax.set(xlabel='' if not xticks else 'Time (s)', 
     xlim=(0, endTime-startTime), 
-    xticks=[] if not xticks else np.linspace(0, endTime-startTime, noXlabels),
-    xticklabels=[] if not xticks else np.around(np.linspace(startTime, endTime, noXlabels), 2),
+    xticks=[] if not xticks else np.arange(0, endTime-startTime, freqXlabels),
+    xticklabels=[] if not xticks else np.around(np.arange(startTime, endTime, freqXlabels), 2),
     title='Waveplot')
     if annotate:
         ax = drawAnnotation(cyclePath, numDiv, startTime, endTime, ax, c=cAnnot)
