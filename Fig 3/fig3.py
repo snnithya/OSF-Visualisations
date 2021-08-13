@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-def annotateInteraction(axs, keywords, cs, interactionFile, startTime, endTime):
+def annotateInteraction(axs, keywords, cs, interactionFile, startTime, duration):
     '''Adds interaction annotation to the axes given
 
     Parameters
@@ -10,7 +10,7 @@ def annotateInteraction(axs, keywords, cs, interactionFile, startTime, endTime):
         cs: list of colours associated with each keyword
         interactionFile: path to csv file with the annotation of the interactions
         startTime: time to start reading the audio
-        endTime: time to stop reading the audio
+        duration: length of audio to consider
 
     Returns
         axs: list of axes with annotation
@@ -18,8 +18,8 @@ def annotateInteraction(axs, keywords, cs, interactionFile, startTime, endTime):
 
     annotations = pd.read_csv(interactionFile, header=None)
     annotations.columns = ['Type', 'Start Time', 'End Time', 'Duration', 'Label']
-    annotations = annotations.loc[((annotations['Start Time'] >= startTime) & (annotations['Start Time'] <= endTime)) &
-                                ((annotations['End Time'] >= startTime) & (annotations['End Time'] <= endTime))
+    annotations = annotations.loc[((annotations['Start Time'] >= startTime) & (annotations['Start Time'] <= startTime+duration)) &
+                                ((annotations['End Time'] >= startTime) & (annotations['End Time'] <= startTime+duration))
                                 ]
     for i, keyword in enumerate(keywords):
         if i < len(axs):
