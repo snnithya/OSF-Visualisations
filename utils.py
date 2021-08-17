@@ -11,6 +11,7 @@ from IPython.display import Audio, Video
 import parselmouth
 import math
 import soundfile as sf
+import ffmpeg
 sns.set_theme()
 
 def readCycleAnnotation(cyclePath, numDiv, startTime, duration):
@@ -36,7 +37,7 @@ def readCycleAnnotation(cyclePath, numDiv, startTime, duration):
     computed = []
     for ind, val in enumerate(provided['Time'].values[:-1]):
         computed.extend(np.around(np.linspace(val, provided['Time'].values[ind+1], num = numDiv, endpoint=False), 2)[1:])
-    return provided, computed
+    return [provided], computed
 
 def readOnsetAnnotation(onsetPath, startTime, duration, onsetKeyword=['Inst']):
     '''Function to read cycle annotation and add divisions in the middle if required.
@@ -57,7 +58,7 @@ def readOnsetAnnotation(onsetPath, startTime, duration, onsetKeyword=['Inst']):
         provided.append(onset_df.loc[(onset_df[keyword] >= startTime) & (onset_df[keyword] <= startTime + duration)])
     return provided
 
-def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', numDiv=0, startTime=0, duration=None, ax=None, annotLabel=True, c='purple'):
+def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', numDiv=0, startTime=0, duration=None, ax=None, annotLabel=True, c='purple', alpha=0.8):
     '''Draws annotations on ax
 
     Parameters
@@ -71,6 +72,7 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onse
         ax (plt.Axes.axis): axis to plot in
         annotLabel (bool): if True, will print annotation label along with line
         c (str or list): list of colour to plot lines in, one for each onsetTimeKeyword (if provided)
+        alpha (float): controls opacity of the annotation lines drawn
 
     Returns
         ax (plt.Axes.axis): axis that has been plotted in
@@ -98,12 +100,12 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onse
         raise Exception('A cycle or onset path has to be provided for annotation')
     if computed is not None:
         for computedVal in computed:
-            ax.axvline(computedVal - startTime, linestyle='--', c=c, alpha=0.4)
+            ax.axvline(computedVal - startTime, linestyle='--', c=c[0], alpha=0.4)
     if provided is not None:
         for i, providedListVal in enumerate(provided):
             firstLabel = True   # marker for first line being plotted; to prevent duplicates from occuring in the legend
             for _, providedVal in providedListVal.iterrows():
-                ax.axvline((providedVal[timeCol[i]]) - startTime, linestyle='-', c=c[i], label=timeCol[i] if firstLabel and cyclePath is None else '', alpha=0.8)  # add label only for first line of onset for each keyword
+                ax.axvline((providedVal[timeCol[i]]) - startTime, linestyle='-', c=c[i], label=timeCol[i] if firstLabel and cyclePath is None else '', alpha=alpha)  # add label only for first line of onset for each keyword
                 if firstLabel:  firstLabel = False
                 if annotLabel:
                     ylims = ax.get_ylim()   # used to set label at 0.7 height of the plot
@@ -111,7 +113,7 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onse
     ax.legend()
     return ax
 
-def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, maxPitch=660, notes=None, tonic=220, timeStep=0.01, octaveJumpCost=0.9, veryAccurate=True, ax=None, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', xticks=False, yticks=False, annotLabel=True, cAnnot='purple'):
+def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, maxPitch=660, notes=None, tonic=220, timeStep=0.01, octaveJumpCost=0.9, veryAccurate=True, ax=None, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', xticks=False, yticks=False, annotLabel=True, cAnnot='purple', ylim=None, annotAlpha=0.8):
     '''Returns pitch contour for the audio
 
     Uses `plotPitch` to plot pitch contour.
@@ -135,12 +137,14 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
         cyclePath: path to file with tala cycle annotations
         numDiv: number of divisions to put between each annotation marking
         onsetPath: path to file with onset annotations; only considered if cyclePath is None
-        onsetKeyword (str): column name in the onset file to take onsets from
+        onsetTimeKeyword (str): column name in the onset file to take onsets from
         onsetLabelKeyword (str): column name with labels for the onsets; if None, no label will be printed
         xticks: if True, will plot xticklabels
         yticks: if True, will plot yticklabels
         annotLabel: if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
         cAnnot: color of the annotation
+        ylim: (min, max) limits for the y axis; if None, will be directly interpreted from the data
+        annotAlpha: controls opacity of the annotation lines
 
     Returns:
         ax: plot of pitch contour if ax was not None
@@ -150,7 +154,7 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
     startTime = math.floor(startTime)   # set start time to an integer, for better readability on the x axis of the plot
     if audio is None:
         # if audio is not given, load audio from audioPath
-        audio, sr = librosa.load(audioPath, sr=sr, mono=True)
+        audio, sr = librosa.load(audioPath, sr=sr, mono=True, offset=startTime, duration=duration)
     if duration is None:
         duration = librosa.get_duration(audio, sr=sr)
         duration = math.ceil(duration)  # set duration to an integer, for better readability on the x axis of the plot
@@ -162,9 +166,9 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
     if ax is None:
         Exception('ax parameter has to be provided')
     # plot the contour
-    return plotPitch(pitch, notes, ax, tonic, startTime, duration, freqXlabels, annotate=annotate, cyclePath=cyclePath, numDiv=numDiv, onsetPath=onsetPath, onsetTimeKeyword=onsetTimeKeyword, onsetLabelKeyword=onsetLabelKeyword, xticks=xticks, yticks=yticks, cAnnot=cAnnot, annotLabel=annotLabel)
+    return plotPitch(pitch, notes, ax, tonic, startTime, duration, freqXlabels, annotate=annotate, cyclePath=cyclePath, numDiv=numDiv, onsetPath=onsetPath, onsetTimeKeyword=onsetTimeKeyword, onsetLabelKeyword=onsetLabelKeyword, xticks=xticks, yticks=yticks, cAnnot=cAnnot, annotLabel=annotLabel, ylim=ylim, annotAlpha=annotAlpha)
 
-def plotPitch(pitch=None, notes=None, ax=None, tonic=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True):
+def plotPitch(pitch=None, notes=None, ax=None, tonic=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True, ylim=None, annotAlpha=0.8):
     '''Converts the pitch contour from Hz to Cents, and plots it
 
     Parameters
@@ -175,7 +179,7 @@ def plotPitch(pitch=None, notes=None, ax=None, tonic=None, startTime=0, duration
         startTime: start time for x labels in the plot
         duration: duration of audio in the plot (used for x labels)
         freqXlabels: time (in seconds) after which each x label occurs
-        annotate: if true will mark taala markings 
+        annotate: if true will mark annotations provided
         xticks: if True, will print x tick labels
         yticks: if True, will print y tick labels
         annotate: if True, will add beat annotations to the plot 
@@ -186,6 +190,8 @@ def plotPitch(pitch=None, notes=None, ax=None, tonic=None, startTime=0, duration
         onsetLabelKeyword (str): column name with labels for the onsets; if None, no label will be printed
         cAnnot: colour to draw annotation lines in; used only if annotate is True
         annotLabel: if True, will print annotation label along with line; used only if annotate is True
+        ylim: (min, max) limits for the y axis; if None, will be directly interpreted from the data
+        annotAlpha (float): controls opacity of the line drawn
     Returns
         ax: plotted axis
     '''
@@ -212,11 +218,13 @@ def plotPitch(pitch=None, notes=None, ax=None, tonic=None, startTime=0, duration
     if notes is not None and yticks:
         # add yticks if needed
         ax.set(
-        yticks=[x['cents'] for x in notes if (x['cents'] >= min(yvals)) & (x['cents'] <= max(yvals))] if yticks else [], 
-        yticklabels=[x['label'] for x in notes if (x['cents'] >= min(yvals)) & (x['cents'] <= max(yvals))] if yticks else [])
+        yticks=[x['cents'] for x in notes if (x['cents'] >= min(yvals[~(np.isnan(yvals))])) & (x['cents'] <= max(yvals[~(np.isnan(yvals))]))] if yticks else [], 
+        yticklabels=[x['label'] for x in notes if (x['cents'] >= min(yvals[~(np.isnan(yvals))])) & (x['cents'] <= max(yvals[~(np.isnan(yvals))]))] if yticks else [])
+    if ylim is not None:
+        ax.set(ylim=ylim)
 
     if annotate:
-        ax = drawAnnotation(cyclePath, onsetPath, onsetTimeKeyword, onsetLabelKeyword, numDiv, startTime, duration, ax, c=cAnnot, annotLabel=annotLabel)
+        ax = drawAnnotation(cyclePath, onsetPath, onsetTimeKeyword, onsetLabelKeyword, numDiv, startTime, duration, ax, c=cAnnot, annotLabel=annotLabel, alpha=annotAlpha)
     return ax
 
 def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, cmap='Blues', ax=None, amin=1e-5, freqXlabels=5, xticks=False, yticks=False, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True, title='Spectrogram'):
@@ -364,7 +372,7 @@ def playAudioWClicks(audio=None, sr=16000, audioPath=None, startTime=0, duration
         sf.write(destPath, audioWClicks, sr)
     return Audio(audioWClicks, rate=sr)
 
-def playVideo(video=None, videoPath=None, startTime=0, duration=None, destPath='Data/Temp/VideoPart.mp4'):
+def playVideo(video=None, videoPath=None, startTime=0, duration=None, destPath='Data/Temp/VideoPart.mp4', videoOffset=0):
     '''Plays relevant part of audio
 
     Parameters
@@ -373,6 +381,7 @@ def playVideo(video=None, videoPath=None, startTime=0, duration=None, destPath='
         startTime (float): time to start reading the video from
         duration (float): duration of the video to load
         destPath (str): path to store shortened video
+        videoOffset (float): number of seconds offset between video and audio; time in audio + videioOffset = time in video
     Returns:
         iPython.display.Video object that plays the video
     '''
@@ -382,8 +391,18 @@ def playVideo(video=None, videoPath=None, startTime=0, duration=None, destPath='
             return Video(videoPath, embed=True)
         else:
             # store a shortened video in destPath
-            # TBD
-            pass
+            vid = ffmpeg.input(videoPath)
+            joined = ffmpeg.concat(
+            vid.video.filter('trim', start=startTime+videoOffset, duration=duration).filter('setpts', 'PTS-STARTPTS'),
+            vid.audio.filter('atrim', start=startTime+videoOffset, duration=duration).filter('asetpts', 'PTS-STARTPTS'),
+            v=1,
+            a=1
+            ).node
+            v3 = joined['v']
+            a3 = joined['a']
+            out = ffmpeg.output(v3, a3, destPath).overwrite_output()
+            out.run()
+            return Video(destPath, embed=True)
     else:
         return Video (data=video, embed=True)
 
