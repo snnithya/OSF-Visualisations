@@ -1,3 +1,10 @@
 */Data/
 *.ipynb_checkpoints/
 NIR*.pdf
+__pycache__/
+testapp/
+OneDrive_1_13-07-2021.zip
+Scripts_Manual_v1.docx
+Time and rhythm in Hindustani music_Examples.docx
+test.ipynb
+Fig 9/pretrained_models/
