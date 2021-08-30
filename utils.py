@@ -429,3 +429,257 @@ def generateFig(noRows, figSize=(14, 7), heightRatios=None):
     specs = fig.add_gridspec(noRows, 1, height_ratios = heightRatios)
     axs = [fig.add_subplot(specs[i, 0]) for i in range(noRows)]
     return fig, axs
+
+def to_dB(x, C):
+    '''Applies logarithmic (base 10) transformation
+    
+    Parameters
+        x: input signal
+        C: scaling constant
+    
+    Returns
+        log-scaled x
+    '''
+	return np.log10(1 + x*C)/(np.log10(1+C))
+
+def subBandEner(X,fs,band):
+    '''Computes spectral sub-band energy (suitable for vocal onset detection)
+
+    Parameters
+        X: STFT of an audio signal x
+        fs: sampling rate
+        band: edge frequencies (in Hz) of the sub-band of interest
+        
+    Returns
+        sbe: array with each value representing the magnitude STFT values in a short-time frame squared & summed over the sub-band
+    '''
+
+	binLow = int(np.ceil(band[0]*X.shape[0]/(fs/2)))
+	binHi = int(np.ceil(band[1]*X.shape[0]/(fs/2)))
+	sbe = np.sum(np.abs(X[binLow:binHi])**2, 0)
+	return sbe
+
+def biphasicDerivative(x, tHop, norm=1, rectify=1):
+    '''Computes a biphasic derivative (See [1] for a detailed explanation of the algorithm)
+    
+    Parameters
+        x: input signal
+        tHop: frame- or hop-length used to obtain input signal values (reciprocal of sampling rate of x)
+        norm: if output is to be normalized
+        rectify: if output is to be rectified to keep only positive values (sufficient for peak-picking)
+    
+    Returns
+        x: after performing the biphasic derivative of input x (i.e, convolving with a biphasic derivative filter)
+
+    '''
+
+	n = arange(-0.1, 0.1, tHop)
+	tau1 = 0.015  # = (1/(T_1*sqrt(2))) || -ve lobe width
+	tau2 = 0.025  # = (1/(T_2*sqrt(2))) || +ve lobe width
+	d1 = 0.02165  # -ve lobe position
+	d2 = 0.005  # +ve lobe position
+	A = exp(-pow((n-d1)/(sqrt(2)*tau1), 2))/(tau1*sqrt(2*pi))
+	B = exp(-pow((n+d2)/(sqrt(2)*tau2), 2))/(tau2*sqrt(2*pi))
+	biphasic = A-B
+	x = convolve(x, biphasic, mode='same')
+	x = -1*x
+	
+	if norm==1:
+		x/=np.max(x)
+		x-=np.mean(x)
+	
+	if rectify==1:
+		x*=(x>0)
+	return x
+
+def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=16000, winSize=0.4, hopSize=0.01, nFFT=1024, source='vocal'):
+    '''Computes onset activation function
+
+    Parameters
+        x: audio signal array
+        audioPath: path to the audio file
+        startTime: time to start reading the audio at
+        endTime: time to stop reading audio at
+        fs: sampling rate to read audio at
+        winSize: window size in seconds for STFT
+        hopSize: hop size in seconds for STFT
+        nFFT: DFT size
+        source: choice of instrument - vocal or pakhawaj
+
+    Returns
+        odf: the frame-wise onset activation function (at a sampling rate of 1/hopSize)
+        onsets: time locations of detected onset peaks in the odf (peaks detected using peak picker from librosa)
+    '''
+
+    winSize = int(np.ceil(winSize*fs))
+    hopSize = int(np.ceil(hopSize*fs))
+    nFFT = int(2**(np.ceil(np.log2(winSize))))
+    
+    if x is not None:
+        x = utils.fade_in(x,int(0.5*fs))
+        x = utils.fade_out(x,int(0.5*fs))
+        x = x[int(np.ceil(startTime*fs)):int(np.ceil(endTime*fs))]
+    elif audioPath is not None:
+        x, _ = librosa.load(audioPath, sr=fs, offset=startTime, duration=endTime-startTime)
+    else:
+        print('Provide either the audio signal or path to the stored audio file on disk')
+        raise
+
+    X,_ = librosa.magphase(librosa.stft(x,win_length=winSize, hop_length=hopSize, n_fft=nFFT))
+
+    if source=='vocal':
+        sub_band = [600,2500]
+        odf = sub_band_ener(X, fs, sub_band)
+        odf = to_db(odf, 100)
+        odf = biphasic_derivative(odf, hopSize/fs, plot_filter=0, norm=1, rectify=1)
+
+        onsets = librosa.onset.onset_detect(onset_envelope=odf.copy(), sr=fs, hop_length=hopSize, pre_max=4, post_max=4, pre_avg=6, post_avg=6, wait=50, delta=0.12)*hopSize/fs
+
+    else:
+        sub_band = [0,fs/2]
+        odf = spectral_flux(X, fs, sub_band, aMin=1e-4, normalize=True)
+        odf = utils.biphasic_derivative(odf, hop_dur, plot_filter=0, norm=1, rectify=1)
+
+        onsets = librosa.onset.onset_detect(onset_envelope=odf, sr=fs, hop_length=hopSize, pre_max=1, post_max=1, pre_avg=1, post_avg=1, wait=10, delta=0.05)*hopSize/fs
+
+    return odf, onsets
+
+def spectralFlux(X, fs, band, aMin=1e-4, normalize=True):
+    '''Computes 1st order rectified spectral flux (difference) of a given STFT input
+    
+    Parameters
+        X: input STFT matrix
+        fs: sampling rate of audio signal
+        band: frequency band over which to compute flux from STFT (sub-band spectral flux)
+        aMin: lower threshold value to prevent log(0)
+        normalize: whether to normalize output before returning
+
+    Returns
+        specFlux: array with frame-wise spectral flux values
+    '''
+
+    X = 20*np.log10(aMin+abs(X)/np.max(np.abs(X)))
+    binLow = int(band[0]*X.shape[0]/(fs/2))
+    binHi = int(band[1]*X.shape[0]/(fs/2))
+    specFlux = np.array([0])
+    for hop in range(1,X.shape[1]):
+        diff = X[binLow:binHi,hop]-X[binLow:binHi,hop-1]
+        diff = (diff + abs(diff))/2
+        specFlux=np.append(specFlux,sum(diff))
+    if normalize:
+        specFlux/=max(specFlux)
+    return specFlux
+    
+def fadeIn(x,length):
+	fade_func = np.ones(len(x))
+	fade_func[:length] = np.hanning(2*length)[:length]
+	x*=fade_func
+	return x
+
+def fadeOut(x,length):
+	fade_func = np.ones(len(x))
+	fade_func[-length:] = np.hanning(2*length)[length:]
+	x*=fade_func
+	return x
+
+def ACF_DFT_sal(signal, t_ACF_lag, t_ACF_frame, t_ACF_hop, fs):
+    n_ACF_lag = int(t_ACF_lag*fs)
+    n_ACF_frame = int(t_ACF_frame*fs)
+    n_ACF_hop = int(t_ACF_hop*fs)
+    signal = subsequences(signal, n_ACF_frame, n_ACF_hop)
+    ACF = np.zeros((len(signal), n_ACF_lag))
+    for i in range(len(ACF)):
+        ACF[i][0] = np.dot(signal[i], signal[i])
+        for j in range(1, n_ACF_lag):
+            ACF[i][j] = np.dot(signal[i][:-j], signal[i][j:])
+    DFT = (abs(np.fft.rfft(signal)))
+    sal = np.zeros(len(ACF))
+    for i in range(len(ACF)):
+        sal[i] = max(ACF[i])
+    for i in range(len(ACF)):
+        if max(ACF[i])!=0:
+            ACF[i] = ACF[i]/max(ACF[i])
+        if max(DFT[i])!=0:
+            DFT[i] = DFT[i]/max(DFT[i])
+    return (ACF, DFT, sal)
+
+def subsequences(signal, frame_length, hop_length):
+    shape = (int(1 + (len(signal) - frame_length)/hop_length), frame_length)
+    strides = (hop_length*signal.strides[0], signal.strides[0])
+    return np.lib.stride_tricks.as_strided(signal, shape=shape, strides=strides)
+
+def plot_matrix(X, Fs=1, Fs_F=1, T_coef=None, F_coef=None, xlabel='Time (seconds)', ylabel='Frequency (Hz)', title='',
+                dpi=72, colorbar=True, colorbar_aspect=20.0, ax=None, figsize=(6, 3), **kwargs):
+    """Plot a matrix, e.g. a spectrogram or a tempogram (function from Notebook: B/B_PythonVisualization.ipynb in [2])
+ 
+    Args:
+        X: The matrix
+        Fs: Sample rate for axis 1
+        Fs_F: Sample rate for axis 0
+        T_coef: Time coeffients. If None, will be computed, based on Fs.
+        F_coef: Frequency coeffients. If None, will be computed, based on Fs_F.
+        xlabel: Label for x axis
+        ylabel: Label for y axis
+        title: Title for plot
+        dpi: Dots per inch
+        colorbar: Create a colorbar.
+        colorbar_aspect: Aspect used for colorbar, in case only a single axes is used.
+        ax: Either (1.) a list of two axes (first used for matrix, second for colorbar), or (2.) a list with a single
+            axes (used for matrix), or (3.) None (an axes will be created).
+        figsize: Width, height in inches
+        **kwargs: Keyword arguments for matplotlib.pyplot.imshow
+
+    Returns:
+        fig: The created matplotlib figure or None if ax was given.
+        ax: The used axes.
+        im: The image plot
+    """
+    fig = None
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+        ax = [ax]
+    if T_coef is None:
+        T_coef = np.arange(X.shape[1]) / Fs
+    if F_coef is None:
+        F_coef = np.arange(X.shape[0]) / Fs_F
+
+    if 'extent' not in kwargs:
+        x_ext1 = (T_coef[1] - T_coef[0]) / 2
+        x_ext2 = (T_coef[-1] - T_coef[-2]) / 2
+        y_ext1 = (F_coef[1] - F_coef[0]) / 2
+        y_ext2 = (F_coef[-1] - F_coef[-2]) / 2
+        kwargs['extent'] = [T_coef[0] - x_ext1, T_coef[-1] + x_ext2, F_coef[0] - y_ext1, F_coef[-1] + y_ext2]
+    if 'cmap' not in kwargs:
+        kwargs['cmap'] = 'gray_r'
+    if 'aspect' not in kwargs:
+        kwargs['aspect'] = 'auto'
+    if 'origin' not in kwargs:
+        kwargs['origin'] = 'lower'
+
+    im = ax[0].imshow(X, **kwargs)
+
+    if len(ax) == 2 and colorbar:
+        plt.colorbar(im, cax=ax[1])
+    elif len(ax) == 2 and not colorbar:
+        ax[1].set_axis_off()
+    elif len(ax) == 1 and colorbar:
+        plt.sca(ax[0])
+        plt.colorbar(im, aspect=colorbar_aspect)
+
+    ax[0].set_xlabel(xlabel, fontsize=14)
+    ax[0].set_ylabel(ylabel, fontsize=14)
+    ax[0].set_title(title, fontsize=18)
+
+    if fig is not None:
+        plt.tight_layout()
+
+    return fig, ax, im
+
+'''
+References
+
+[1] Rao, P., Vinutha, T.P. and Rohit, M.A., 2020. Structural Segmentation of Alap in Dhrupad Vocal Concerts. 
+    Transactions of the International Society for Music Information Retrieval, 3(1), pp.137–152. DOI: http://doi.org/10.5334/tismir.64
+[2] Meinard Müller and Frank Zalkow: FMP Notebooks: Educational Material for Teaching and Learning Fundamentals of Music Processing. 
+    Proceedings of the International Conference on Music Information Retrieval (ISMIR), Delft, The Netherlands, 2019.
+'''
