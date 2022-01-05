@@ -1,5 +1,3 @@
-from IPython.core.display import Video
-from librosa.core.audio import get_duration
 from matplotlib import pyplot as plt
 import pandas as pd
 import numpy as np
@@ -12,7 +10,7 @@ import parselmouth
 import math
 import soundfile as sf
 import ffmpeg
-sns.set_theme()
+sns.set_theme(rc={"xtick.bottom" : True, "ytick.left" : False, "xtick.major.size":4, "xtick.minor.size":2, "ytick.major.size":4, "ytick.minor.size":2, "xtick.labelsize": 10, "ytick.labelsize": 10})
 
 def readCycleAnnotation(cyclePath, numDiv, startTime, duration):
     '''Function to read cycle annotation and add divisions in the middle if required.
@@ -94,7 +92,7 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onse
         timeCol = onsetTimeKeyword if isinstance(onsetTimeKeyword, list) else [onsetTimeKeyword]    # name of column with time readings
         labelCol = onsetLabelKeyword if isinstance(onsetLabelKeyword, list) else [onsetLabelKeyword]  # name of column to extract label of annotation from
         c = c if isinstance(c, list) else [c]
-        provided = readOnsetAnnotation(onsetPath, startTime, duration, onsetTimeKeyword)
+        provided = readOnsetAnnotation(onsetPath, startTime, duration, onsetKeyword=timeCol)
         computed = None
     else:
         raise Exception('A cycle or onset path has to be provided for annotation')
@@ -109,8 +107,12 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onse
                 if firstLabel:  firstLabel = False
                 if annotLabel:
                     ylims = ax.get_ylim()   # used to set label at 0.7 height of the plot
-                    ax.annotate(f"{float(providedVal[labelCol[i]]):g}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*0.7 + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c='white')
-    ax.legend()
+                    if isinstance(providedVal[labelCol[i]], str):
+                        ax.annotate(f"{providedVal[labelCol[i]]}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*0.7 + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c='white')
+                    else:
+                        ax.annotate(f"{float(providedVal[labelCol[i]]):g}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*0.7 + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c='white')
+    if onsetPath is not None and cyclePath is None:     # add legend only is onsets are given, i.e. legend is added
+        ax.legend()
     return ax
 
 def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, maxPitch=660, notes=None, tonic=220, timeStep=0.01, octaveJumpCost=0.9, veryAccurate=True, ax=None, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', xticks=False, yticks=False, annotLabel=True, cAnnot='purple', ylim=None, annotAlpha=0.8):
@@ -157,7 +159,8 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
         audio, sr = librosa.load(audioPath, sr=sr, mono=True, offset=startTime, duration=duration)
     if duration is None:
         duration = librosa.get_duration(audio, sr=sr)
-        duration = math.ceil(duration)  # set duration to an integer, for better readability on the x axis of the plot
+        duration = math.floor(duration)  # set duration to an integer, for better readability on the x axis of the plot
+        audio = audio[:int(duration*sr)]    # ensure that audio length = duration
 
     snd = parselmouth.Sound(audio, sr)
     pitch = snd.to_pitch_ac(time_step=timeStep, pitch_floor=minPitch, very_accurate=veryAccurate, octave_jump_cost=octaveJumpCost, pitch_ceiling=maxPitch)
@@ -258,7 +261,8 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
         audio, sr = librosa.load(audioPath, sr=sr, mono=True, offset=startTime, duration=duration)
     if duration is None:
         duration = librosa.get_duration(audio, sr=sr)
-        duration = math.ceil(duration)  # set duration to an integer, for better readability on the x axis of the plot
+        duration = math.floor(duration)  # set duration to an integer, for better readability on the x axis of the plot
+        audio = audio[:int(duration*sr)]    # ensure that audio length = duration
     
     # stft params
     winsize = int(np.ceil(sr*40e-3))
@@ -284,7 +288,7 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
         ax = drawAnnotation(cyclePath, onsetPath, onsetTimeKeyword, onsetLabelKeyword, numDiv, startTime, duration, ax, c=cAnnot, annotLabel=annotLabel)
     return ax
 
-def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, cAnnot='purple', annotLabel=True):
+def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, cAnnot='purple', annotLabel=True, odf=False, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black'):
     '''Plots the wave plot of the audio
 
     audio: loaded audio time series
@@ -301,6 +305,12 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
     onsetPath: path to file with onset annotations; only considered if cyclePath is None
     cAnnot: colour for the annotation marking
     annotLabel: if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
+    odf: if True, will plot the onset detection function over the wave form
+    winSize_odf: window size, fed to the onset detection function; valid only if odf is true
+    hopSize_odf: hop size in seconds, fed to the onset detection function; valid only if odf is true
+    nFFT_odf: size of DFT used in onset detection function; valid only if odf is true
+    source_odf: type of instrument - vocal or pakhawaj, fed to odf; valid only if odf is true
+    cOdf: colour to plot onset detection function in; valid only if odf is true
     '''
     if ax is None:
         Exception('ax parameter has to be provided')
@@ -309,25 +319,78 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
         audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
     if duration is None:
         duration = librosa.get_duration(audio, sr=sr)
-        duration = math.ceil(duration)  # set duration to an integer, for better readability on the x axis of the plot
-    
-    
+        duration = math.floor(duration)  # set duration to an integer, for better readability on the x axis of the plot
+        audio = audio[:int(duration*sr)]    # ensure that audio length = duration
+
     waveplot(audio, sr, ax=ax)
     ax.set(xlabel='' if not xticks else 'Time (s)', 
     xlim=(0, duration), 
     xticks=[] if not xticks else np.around(np.arange(0, duration, freqXlabels)),
     xticklabels=[] if not xticks else np.around(np.arange(startTime, duration+startTime, freqXlabels), 2),
     title='Waveplot')
+    if odf:
+        odf_vals, _, _ = getOnsetActivation(x=audio, audioPath=None, startTime=0, endTime=duration, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
+        ax.plot(np.arange(0, duration, hopSize_odf), odf_vals[:-1], c=cOdf)     # plot odf_vals and consider odf_vals for all values except the last frame
+        max_abs_val = max(abs(min(odf_vals)), abs(max(odf_vals)))   # find maximum value to set y limits to ensure symmetrical plot
+        ax.set(ylim=(-max_abs_val, max_abs_val))
     if annotate:
-        ax = drawAnnotation(cyclePath, onsetPath, numDiv, startTime, duration, ax, c=cAnnot, annotLabel=annotLabel)
-    return ax
+        ax = drawAnnotation(cyclePath=cyclePath, onsetPath=onsetPath, numDiv=numDiv, startTime=startTime, duration=duration, ax=ax, c=cAnnot, annotLabel=annotLabel)
+    return ax, pd.DataFrame({'Time': np.arange(0, duration, hopSize_odf), 'ODF': odf_vals[:-1]})
 
+def plotEnergy(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, cAnnot='purple', annotLabel=True, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black'):
+    '''
+    For debugging puposes only - plots energy function used to calculate odf
+
+    Parameters
+        audio: loaded audio time series
+        sr: sample rate that audio time series is loaded/ is to be loaded in
+        audioPath: path to the audio file
+        startTime: time to start reading the audio at
+        duration: duration of audio to load
+        ax: axis to plot waveplot in
+        xticks: if True, will plot xticklabels
+        freqXlabels: time (in seconds) after which each x label occurs
+        annotate: if True, will annotate tala markings
+        cyclePath: path to file with tala cycle annotations
+        numDiv: number of divisions to put between each annotation marking
+        onsetPath: path to file with onset annotations; only considered if cyclePath is None
+        cAnnot: colour for the annotation marking
+        annotLabel: if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
+        odf: if True, will plot the onset detection function over the wave form
+        winSize_odf: window size, fed to the onset detection function; valid only if odf is true
+        hopSize_odf: hop size in seconds, fed to the onset detection function; valid only if odf is true
+        nFFT_odf: size of DFT used in onset detection function; valid only if odf is true
+        source_odf: type of instrument - vocal or pakhawaj, fed to odf; valid only if odf is true
+        cOdf: colour to plot onset detection function in; valid only if odf is true
+    '''
+    if ax is None:
+        Exception('ax parameter has to be provided')
+    startTime = math.floor(startTime)   # set start time to an integer, for better readability on the x axis of the plot
+    if audio is None:
+        audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
+    if duration is None:
+        duration = librosa.get_duration(audio, sr=sr)
+        duration = math.floor(duration)  # set duration to an integer, for better readability on the x axis of the plot
+        audio = audio[:int(duration*sr)]    # ensure that audio length = duration
+    ax.set(xlabel='' if not xticks else 'Time (s)', 
+    xlim=(0, duration), 
+    xticks=[] if not xticks else np.around(np.arange(0, duration, freqXlabels)),
+    xticklabels=[] if not xticks else np.around(np.arange(startTime, duration+startTime, freqXlabels), 2),
+    title='Energy Contour', 
+    ylabel='dB')
+
+    _, _, energy = getOnsetActivation(x=audio, audioPath=None, startTime=0, endTime=duration, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
+    ax.plot(np.arange(0, duration, hopSize_odf), energy[:-1], c=cOdf)
+    if annotate:
+        ax = drawAnnotation(cyclePath=cyclePath, onsetPath=onsetPath, numDiv=numDiv, startTime=startTime, duration=duration, ax=ax, c=cAnnot, annotLabel=annotLabel)
+    return ax
+    
 def playAudio(audio=None, sr=16000, audioPath=None, startTime=0, duration=None):
     '''Plays relevant part of audio
 
     Parameters
         audio: loaded audio sample
-        sr: sample rate of audio
+        sr: sample rate of audio; valid only if audio is not None
         audioPath: path to audio file
         startTime: time to start reading audio at
         duration: duration of the audio to load
@@ -440,7 +503,7 @@ def to_dB(x, C):
     Returns
         log-scaled x
     '''
-	return np.log10(1 + x*C)/(np.log10(1+C))
+    return np.log10(1 + x*C)/(np.log10(1+C))
 
 def subBandEner(X,fs,band):
     '''Computes spectral sub-band energy (suitable for vocal onset detection)
@@ -454,10 +517,10 @@ def subBandEner(X,fs,band):
         sbe: array with each value representing the magnitude STFT values in a short-time frame squared & summed over the sub-band
     '''
 
-	binLow = int(np.ceil(band[0]*X.shape[0]/(fs/2)))
-	binHi = int(np.ceil(band[1]*X.shape[0]/(fs/2)))
-	sbe = np.sum(np.abs(X[binLow:binHi])**2, 0)
-	return sbe
+    binLow = int(np.ceil(band[0]*X.shape[0]/(fs/2)))
+    binHi = int(np.ceil(band[1]*X.shape[0]/(fs/2)))
+    sbe = np.sum(np.abs(X[binLow:binHi])**2, 0)
+    return sbe
 
 def biphasicDerivative(x, tHop, norm=1, rectify=1):
     '''Computes a biphasic derivative (See [1] for a detailed explanation of the algorithm)
@@ -473,24 +536,24 @@ def biphasicDerivative(x, tHop, norm=1, rectify=1):
 
     '''
 
-	n = arange(-0.1, 0.1, tHop)
-	tau1 = 0.015  # = (1/(T_1*sqrt(2))) || -ve lobe width
-	tau2 = 0.025  # = (1/(T_2*sqrt(2))) || +ve lobe width
-	d1 = 0.02165  # -ve lobe position
-	d2 = 0.005  # +ve lobe position
-	A = exp(-pow((n-d1)/(sqrt(2)*tau1), 2))/(tau1*sqrt(2*pi))
-	B = exp(-pow((n+d2)/(sqrt(2)*tau2), 2))/(tau2*sqrt(2*pi))
-	biphasic = A-B
-	x = convolve(x, biphasic, mode='same')
-	x = -1*x
-	
-	if norm==1:
-		x/=np.max(x)
-		x-=np.mean(x)
-	
-	if rectify==1:
-		x*=(x>0)
-	return x
+    n = np.arange(-0.1, 0.1, tHop)
+    tau1 = 0.015  # = (1/(T_1*sqrt(2))) || -ve lobe width
+    tau2 = 0.025  # = (1/(T_2*sqrt(2))) || +ve lobe width
+    d1 = 0.02165  # -ve lobe position
+    d2 = 0.005  # +ve lobe position
+    A = np.exp(-pow((n-d1)/(np.sqrt(2)*tau1), 2))/(tau1*np.sqrt(2*np.pi))
+    B = np.exp(-pow((n+d2)/(np.sqrt(2)*tau2), 2))/(tau2*np.sqrt(2*np.pi))
+    biphasic = A-B
+    x = np.convolve(x, biphasic, mode='same')
+    x = -1*x
+
+    if norm==1:
+        x/=np.max(x)
+        x-=np.mean(x)
+
+    if rectify==1:
+        x*=(x>0)
+    return x
 
 def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=16000, winSize=0.4, hopSize=0.01, nFFT=1024, source='vocal'):
     '''Computes onset activation function
@@ -516,8 +579,8 @@ def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=160
     nFFT = int(2**(np.ceil(np.log2(winSize))))
     
     if x is not None:
-        x = utils.fade_in(x,int(0.5*fs))
-        x = utils.fade_out(x,int(0.5*fs))
+        x = fadeIn(x,int(0.5*fs))
+        x = fadeOut(x,int(0.5*fs))
         x = x[int(np.ceil(startTime*fs)):int(np.ceil(endTime*fs))]
     elif audioPath is not None:
         x, _ = librosa.load(audioPath, sr=fs, offset=startTime, duration=endTime-startTime)
@@ -529,20 +592,22 @@ def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=160
 
     if source=='vocal':
         sub_band = [600,2500]
-        odf = sub_band_ener(X, fs, sub_band)
-        odf = to_db(odf, 100)
-        odf = biphasic_derivative(odf, hopSize/fs, plot_filter=0, norm=1, rectify=1)
+        odf = subBandEner(X, fs, sub_band)
+        odf = to_dB(odf, 100)
+        energy = odf.copy()
+        odf = biphasicDerivative(odf, hopSize/fs, norm=1, rectify=1)
 
         onsets = librosa.onset.onset_detect(onset_envelope=odf.copy(), sr=fs, hop_length=hopSize, pre_max=4, post_max=4, pre_avg=6, post_avg=6, wait=50, delta=0.12)*hopSize/fs
 
     else:
         sub_band = [0,fs/2]
-        odf = spectral_flux(X, fs, sub_band, aMin=1e-4, normalize=True)
-        odf = utils.biphasic_derivative(odf, hop_dur, plot_filter=0, norm=1, rectify=1)
+        odf = spectralFlux(X, fs, sub_band, aMin=1e-4, normalize=True)
+        energy = odf.copy()
+        odf = biphasicDerivative(odf, hopSize, norm=1, rectify=1)
 
         onsets = librosa.onset.onset_detect(onset_envelope=odf, sr=fs, hop_length=hopSize, pre_max=1, post_max=1, pre_avg=1, post_avg=1, wait=10, delta=0.05)*hopSize/fs
 
-    return odf, onsets
+    return odf, onsets, energy
 
 def spectralFlux(X, fs, band, aMin=1e-4, normalize=True):
     '''Computes 1st order rectified spectral flux (difference) of a given STFT input
