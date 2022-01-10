@@ -1,3 +1,4 @@
+import warnings
 from matplotlib import pyplot as plt
 import pandas as pd
 import numpy as np
@@ -16,14 +17,14 @@ def readCycleAnnotation(cyclePath, numDiv, startTime, duration):
     '''Function to read cycle annotation and add divisions in the middle if required.
 
     Parameters:
-        cyclePath: path to the cycle annotation file
-        numDiv: number of equally spaced divisions to add between pairs of annotations (numDiv - 1 timestamps will be added between each pair)
-        startTime: start time of audio being analysed
-        duration: duration of the audio to be analysed
+        cyclePath (str): path to the cycle annotation file
+        numDiv (int): number of equally spaced divisions to add between pairs of annotations (numDiv - 1 timestamps will be added between each pair)
+        startTime (float): start time of audio being analysed
+        duration (float): duration of the audio to be analysed
 
     Returns:
-        provided: a numpy array of annotations from the file
-        computed: a numpy array of division between annotations
+        provided (np.ndarray): a numpy array of annotations from the file
+        computed (list): a list of division between annotations
     '''
 
     cycle_df = pd.read_csv(cyclePath)
@@ -56,7 +57,7 @@ def readOnsetAnnotation(onsetPath, startTime, duration, onsetKeyword=['Inst']):
         provided.append(onset_df.loc[(onset_df[keyword] >= startTime) & (onset_df[keyword] <= startTime + duration)])
     return provided
 
-def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', numDiv=0, startTime=0, duration=None, ax=None, annotLabel=True, c='purple', alpha=0.8):
+def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', numDiv=0, startTime=0, duration=None, ax=None, annotLabel=True, c='purple', alpha=0.8, y=0.7, size=10):
     '''Draws annotations on ax
 
     Parameters
@@ -71,10 +72,13 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onse
         annotLabel (bool): if True, will print annotation label along with line
         c (str or list): list of colour to plot lines in, one for each onsetTimeKeyword (if provided)
         alpha (float): controls opacity of the annotation lines drawn
+        y (float): float value from [0, 1] indicating where the label should occur on the y-axis. 0 indicates the lower ylim, 1 indicates the higher ylim.
+        size (int): font size for annotated text
 
     Returns
         ax (plt.Axes.axis): axis that has been plotted in
     '''
+
     if cyclePath is not None:
         provided, computed = readCycleAnnotation(cyclePath, numDiv, startTime, duration)
         timeCol = ['Time']    # name of column with time readings
@@ -108,49 +112,52 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onse
                 if annotLabel:
                     ylims = ax.get_ylim()   # used to set label at 0.7 height of the plot
                     if isinstance(providedVal[labelCol[i]], str):
-                        ax.annotate(f"{providedVal[labelCol[i]]}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*0.7 + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c='white')
+                        ax.annotate(f"{providedVal[labelCol[i]]}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*y + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c='white')
                     else:
-                        ax.annotate(f"{float(providedVal[labelCol[i]]):g}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*0.7 + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c='white')
+                        ax.annotate(f"{float(providedVal[labelCol[i]]):g}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*y + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c='white')
     if onsetPath is not None and cyclePath is None:     # add legend only is onsets are given, i.e. legend is added
         ax.legend()
     return ax
 
-def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, maxPitch=660, notes=None, tonic=220, timeStep=0.01, octaveJumpCost=0.9, veryAccurate=True, ax=None, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', xticks=False, yticks=False, annotLabel=True, cAnnot='purple', ylim=None, annotAlpha=0.8):
-    '''Returns pitch contour for the audio
+def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, maxPitch=660, notes=None, tonic=220, timeStep=0.01, octaveJumpCost=0.9, veryAccurate=True, ax=None, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', xticks=False, yticks=False, xlabel=True, ylabel=True, title='Pitch Contour (Cents)', annotLabel=True, cAnnot='purple', ylim=None, annotAlpha=0.8):
+    '''Returns pitch contour (in cents) for the audio
 
-    Uses `plotPitch` to plot pitch contour.
+    Uses `plotPitch` to plot pitch contour if ax is not None.
 
     Parameters
-        audio: loaded audio time series
-        sr: sample rate of audio time series/ to load the audio at
-        audioPath: path to audio file; only needed if audio is None
-        startTime: time to start reading audio file
-        duration: duration of the audio file to read
-        minPitch: minimum pitch to read for contour extraction
-        maxPitch: maximum pitch to read for contour extraction
-        notes: list of note objects indicating notes present in the raga
-        tonic: tonic of the audio
-        timeStep: time steps in which audio is extracted
-        octaveJumpCost: parameter passed to pitch detection function
-        veryAccurate: parameter passed to pitch detection function
-        ax: axis to plot the pitch contour in
-        freqXlabels: time (in seconds) after which each x label occurs
-        annotate: if True, will annotate tala markings
-        cyclePath: path to file with tala cycle annotations
-        numDiv: number of divisions to put between each annotation marking
-        onsetPath: path to file with onset annotations; only considered if cyclePath is None
+        audio (np.ndarray): loaded audio time series
+        sr (int): sample rate of audio time series/ to load the audio at
+        audioPath (str): path to audio file; only needed if audio is None
+        startTime (float): time to start reading audio file
+        duration (float): duration of the audio file to read
+        minPitch (float): minimum pitch to read for contour extraction
+        maxPitch (float): maximum pitch to read for contour extraction
+        notes (dict): list of note objects indicating notes present in the raga
+        tonic (float): tonic of the audio
+        timeStep (float): time steps in which audio is extracted
+        octaveJumpCost (float): parameter passed to pitch detection function
+        veryAccurate (bool): parameter passed to pitch detection function
+        ax (matplotlib.axes.Axes): axis to plot the pitch contour in
+        freqXlabels (float): time (in seconds) after which each x label occurs
+        annotate (bool): if True, will annotate tala markings
+        cyclePath (str): path to file with tala cycle annotations
+        numDiv (int): number of divisions to put between each annotation marking
+        onsetPath (str): path to file with onset annotations; only considered if cyclePath is None
         onsetTimeKeyword (str): column name in the onset file to take onsets from
         onsetLabelKeyword (str): column name with labels for the onsets; if None, no label will be printed
-        xticks: if True, will plot xticklabels
-        yticks: if True, will plot yticklabels
+        xticks (bool): if True, will plot xticklabels
+        yticks (bool): if True, will plot yticklabels
+        xlabel (bool): if True, will print xlabel
+        ylabel (bool): if True will pring ylabel
+        title (str): Title to add to the plot
         annotLabel: if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
-        cAnnot: color of the annotation
-        ylim: (min, max) limits for the y axis; if None, will be directly interpreted from the data
-        annotAlpha: controls opacity of the annotation lines
+        cAnnot: input to the ax.annotate function for the colour (c) parameter
+        ylim (tuple): (min, max) limits for the y axis; if None, will be directly interpreted from the data
+        annotAlpha (float): controls opacity of the annotation lines
 
     Returns:
-        ax: plot of pitch contour if ax was not None
-        
+        ax (matplotlib.axes.Axes): plot of pitch contour if ax was not None
+        (pitchvals, timevals): tuple with arrays of pitch values (in cents) and time stamps; returned if ax was None
     '''
     
     startTime = math.floor(startTime)   # set start time to an integer, for better readability on the x axis of the plot
@@ -164,95 +171,111 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
 
     snd = parselmouth.Sound(audio, sr)
     pitch = snd.to_pitch_ac(time_step=timeStep, pitch_floor=minPitch, very_accurate=veryAccurate, octave_jump_cost=octaveJumpCost, pitch_ceiling=maxPitch)
-    
-    # if ax is None, raise error
-    if ax is None:
-        Exception('ax parameter has to be provided')
-    # plot the contour
-    return plotPitch(pitch, notes, ax, tonic, startTime, duration, freqXlabels, annotate=annotate, cyclePath=cyclePath, numDiv=numDiv, onsetPath=onsetPath, onsetTimeKeyword=onsetTimeKeyword, onsetLabelKeyword=onsetLabelKeyword, xticks=xticks, yticks=yticks, cAnnot=cAnnot, annotLabel=annotLabel, ylim=ylim, annotAlpha=annotAlpha)
 
-def plotPitch(pitch=None, notes=None, ax=None, tonic=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True, ylim=None, annotAlpha=0.8):
-    '''Converts the pitch contour from Hz to Cents, and plots it
+    pitchvals = pitch.selected_array['frequency']
+    pitchvals[pitchvals==0] = np.nan    # mark unvoiced regions as np.nan
+    if tonic is None:   Exception('No tonic provided')
+    pitchvals[~(np.isnan(pitchvals))] = 1200*np.log2(pitchvals[~(np.isnan(pitchvals))]/tonic)    #convert Hz to cents
+    timevals = pitch.xs()
+    if ax is None:
+        warnings.warn('ax not provided; returning pitch and time values')
+        return (pitchvals, timevals)
+    else:
+        # plot the contour
+        return plotPitch(pitchvals, timevals, notes, ax, tonic, startTime, duration, freqXlabels, annotate=annotate, cyclePath=cyclePath, numDiv=numDiv, onsetPath=onsetPath, onsetTimeKeyword=onsetTimeKeyword, onsetLabelKeyword=onsetLabelKeyword, xticks=xticks, yticks=yticks, xlabel=xlabel, ylabel=ylabel, title=title, cAnnot=cAnnot, annotLabel=annotLabel, ylim=ylim, annotAlpha=annotAlpha)
+
+def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, tonic=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, xlabel=True, ylabel=True, title='Pitch Contour (Cents)', annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True, ylim=None, annotAlpha=0.8, yAnnot=0.7, sizeAnnot=10):
+    '''Plots the pitch contour
 
     Parameters
-        pitch: pitch object from `pitchCountour`
-        notes: object for each note used for labelling y-axis
-        ax: axis object on which plot is to be plotted
-        tonic: tonic (in Hz) of audio clip
-        startTime: start time for x labels in the plot
-        duration: duration of audio in the plot (used for x labels)
-        freqXlabels: time (in seconds) after which each x label occurs
-        annotate: if true will mark annotations provided
-        xticks: if True, will print x tick labels
-        yticks: if True, will print y tick labels
-        annotate: if True, will add beat annotations to the plot 
-        cyclePath: path to file with cycle annotations; used only if annotate is True
-        numDiv: number of divisions to add between each marked cycle; used only if annotate is True
-        onsetPath: path to file with onset annotations; only considered if cyclePath is None
+        pitchvals (np.ndarray): pitch values in cents
+        timevals (np.ndarray): time values in seconds
+        notes (dict): object for each note used for labelling y-axis
+        ax (matplotlib.Axes.axes): axis object on which plot is to be plotted
+        tonic (float): tonic (in Hz) of audio clip
+        startTime (float): start time for x labels in the plot
+        duration (float): duration of audio in the plot (used for x labels)
+        freqXlabels (int): time (in seconds) after which each x label occurs
+        annotate (bool): if true will mark annotations provided
+        xticks (bool): if True, will print x tick labels
+        yticks (bool): if True, will print y tick labels
+        xlabel (bool): if True, will add label to x axis
+        ylabel (bool): if True, will add label to y axis
+        title (str): title to add to the plot
+        annotate (bool): if True, will add beat annotations to the plot 
+        cyclePath (bool): path to file with cycle annotations; used only if annotate is True
+        numDiv (int): number of divisions to add between each marked cycle; used only if annotate is True
+        onsetPath (str): path to file with onset annotations; only considered if cyclePath is None
         onsetKeyword (str): column name in the onset file to take onsets from
         onsetLabelKeyword (str): column name with labels for the onsets; if None, no label will be printed
-        cAnnot: colour to draw annotation lines in; used only if annotate is True
-        annotLabel: if True, will print annotation label along with line; used only if annotate is True
-        ylim: (min, max) limits for the y axis; if None, will be directly interpreted from the data
+        cAnnot: input to the ax.annotate function for the colour (c) parameter; used only if annotate is True
+        annotLabel (bool): if True, will print annotation label along with line; used only if annotate is True
+        ylim (tuple): (min, max) limits for the y axis; if None, will be directly interpreted from the data
         annotAlpha (float): controls opacity of the line drawn
+        yAnnot (float): float value from [0, 1] indicating where the label should occur on the y-axis. 0 indicates the lower ylim, 1 indicates the higher ylim.
+        sizeAnnot (int): font size for annotated text
     Returns
         ax: plotted axis
     '''
 
     # Check that all required parameters are present
-    if pitch is None:
+    if pitchvals is None:
         Exception('No pitch contour provided')
-    if tonic is None:
-        Exception('No tonic provided')
+    if timevals is None:
+        warnings.warn('No time values provided, assuming 0.01 s time steps in pitch contour')
+        timevals = np.arange(0, len(pitchvals)*0.01, 0.01)
     if ax is None:
         Exception('ax parameter has to be provided')
-    yvals = pitch.selected_array['frequency']
-    yvals[yvals==0] = np.nan    # mark unvoiced regions as np.nan
-    yvals[~(np.isnan(yvals))] = 1200*np.log2(yvals[~(np.isnan(yvals))]/tonic)   #convert Hz to cents
-    xvals = pitch.xs()
+    
     # duration = xvals[-1] + 1    # set duration as last x value + 1
-    ax = sns.lineplot(x=xvals, y=yvals, ax=ax)
-    ax.set(xlabel='Time Stamp (s)' if xticks else '', 
-    ylabel='Notes' if yticks else '', 
-    title='Pitch Contour (in Cents)', 
+    ax = sns.lineplot(x=timevals, y=pitchvals, ax=ax)
+    ax.set(xlabel='Time Stamp (s)' if xlabel else '', 
+    ylabel='Notes' if ylabel else '', 
+    title=title, 
     xlim=(0, duration), 
-    xticks=(np.arange(0, duration, freqXlabels)), 
-    xticklabels=(np.arange(startTime, duration+startTime, freqXlabels) )if xticks else [])
+    xticks=np.around(np.arange(math.ceil(startTime)-startTime, duration, freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
+    xticklabels=np.around(np.arange(startTime, duration+startTime, freqXlabels) ).astype(int) if xticks else [])
     if notes is not None and yticks:
         # add yticks if needed
         ax.set(
-        yticks=[x['cents'] for x in notes if (x['cents'] >= min(yvals[~(np.isnan(yvals))])) & (x['cents'] <= max(yvals[~(np.isnan(yvals))]))] if yticks else [], 
-        yticklabels=[x['label'] for x in notes if (x['cents'] >= min(yvals[~(np.isnan(yvals))])) & (x['cents'] <= max(yvals[~(np.isnan(yvals))]))] if yticks else [])
+        yticks=[x['cents'] for x in notes if (x['cents'] >= min(pitchvals[~(np.isnan(pitchvals))])) & (x['cents'] <= max(pitchvals[~(np.isnan(pitchvals))]))] if yticks else [], 
+        yticklabels=[x['label'] for x in notes if (x['cents'] >= min(pitchvals[~(np.isnan(pitchvals))])) & (x['cents'] <= max(pitchvals[~(np.isnan(pitchvals))]))] if yticks else [])
     if ylim is not None:
         ax.set(ylim=ylim)
 
     if annotate:
-        ax = drawAnnotation(cyclePath, onsetPath, onsetTimeKeyword, onsetLabelKeyword, numDiv, startTime, duration, ax, c=cAnnot, annotLabel=annotLabel, alpha=annotAlpha)
+        ax = drawAnnotation(cyclePath, onsetPath, onsetTimeKeyword, onsetLabelKeyword, numDiv, startTime, duration, ax, c=cAnnot, annotLabel=annotLabel, alpha=annotAlpha, y=yAnnot, size=sizeAnnot)
     return ax
 
-def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, cmap='Blues', ax=None, amin=1e-5, freqXlabels=5, xticks=False, yticks=False, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True, title='Spectrogram'):
+def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, winSize=0.04, hopSize=0.01, n_fft=None, cmap='Blues', ax=None, amin=1e-5, freqXlabels=5, xticks=False, yticks=False, xlabel=True, ylabel=True, title='Spectrogram', annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True):
     '''Plots spectrogram
 
     Parameters
-        audio: loaded audio time series
-        sr: sample rate that audio time series is loaded/ is to be loaded in
-        audioPath: path to the audio file; only needed if audio is None
-        startTime: time to start reading the audio at
-        duration: duration of audio
-        cmap: colormap to use to plot spectrogram
-        ax: axis to plot spectrogram in
-        amin: controls the contrast of the spectrogram; passed into librosa.power_to_db function
-        freqXlabels: time (in seconds) after which each x label occurs
-        xticks: if true, will print x labels
-        yticks: if true, will print y labels
-        annotate: if True, will annotate either tala or onset markings; if both are provided, tala annotations will be marked
-        cyclePath: path to file with tala cycle annotations
-        numDiv: number of divisions to put between each tala annotation marking
-        onsetPath: path to file with onset annotations; only considered if cyclePath is None
+        audio (np.ndarray): loaded audio time series
+        sr (int): sample rate that audio time series is loaded/ is to be loaded in
+        audioPath (str): path to the audio file; only needed if audio is None
+        startTime (float): time to start reading the audio at
+        duration (float): duration of audio
+        winSize (float): size of window for STFT in seconds
+        hopSize (float): size of hop for STFT in seconds
+        n_fft (int): DFT size
+        cmap (matplotlib.colors.Colormap or str): colormap to use to plot spectrogram
+        ax (plt.Axes.axes): axis to plot spectrogram in
+        amin (float): controls the contrast of the spectrogram; passed into librosa.power_to_db function
+        freqXlabels (float): time (in seconds) after which each x label occurs
+        xticks (bool): if true, will print x labels
+        yticks (bool): if true, will print y labels
+        xlabel (bool): if true, will add an xlabel
+        ylabel (bool): if true, will add a ylabel
+        title (str): title for the plot
+        annotate (bool): if True, will annotate either tala or onset markings; if both are provided, tala annotations will be marked
+        cyclePath (str): path to file with tala cycle annotations
+        numDiv (int): number of divisions to put between each tala annotation marking
+        onsetPath (str): path to file with onset annotations; only considered if cyclePath is None
         onsetKeyword (str): column name in the onset file to take onsets from
         onsetLabelKeyword (str): column name with labels for the onsets; if None, no label will be printed
-        cAnnot: colour for the annotation marking
-        annotLabel: if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
+        cAnnot: input to the ax.annotate function for the colour (c) parameter; used only if annotate is True
+        annotLabel (bool): if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
     '''
     if ax is None:
         Exception('ax parameter has to be provided')
@@ -264,22 +287,24 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
         duration = math.floor(duration)  # set duration to an integer, for better readability on the x axis of the plot
         audio = audio[:int(duration*sr)]    # ensure that audio length = duration
     
-    # stft params
-    winsize = int(np.ceil(sr*40e-3))
-    hopsize = int(np.ceil(sr*10e-3))
-    nfft = int(2**np.ceil(np.log2(winsize)))
+    # convert winSize and hopSize from seconds to samples
+    winSize = int(np.ceil(sr*winSize))
+    hopSize = int(np.ceil(sr*hopSize))
+    if n_fft is None:
+        n_fft = int(2**np.ceil(np.log2(winSize)))
 
     # STFT
-    f,t,X = sig.stft(audio, fs=sr, window='hann', nperseg=winsize, noverlap=(winsize-hopsize), nfft=nfft)
+    f,t,X = sig.stft(audio, fs=sr, window='hann', nperseg=winSize, noverlap=(winSize-hopSize), nfft=n_fft)
     X_dB = librosa.power_to_db(np.abs(X), ref = np.max, amin=amin)
 
-    specshow(X_dB, x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopsize, ax=ax, cmap=cmap)
-    ax.set(ylabel='Frequency (Hz)' if yticks else '', 
-    xlabel='Time (s)' if xticks else '', 
+    specshow(X_dB, x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap)
+    ax.set(ylabel='Frequency (Hz)' if ylabel else '', 
+    xlabel='Time (s)' if xlabel else '', 
     title=title,
     xlim=(0, duration), 
     xticks=(np.arange(0, duration, freqXlabels)) if xticks else [], 
-    xticklabels=(np.arange(startTime, duration+startTime, freqXlabels)) if xticks else [],
+    xticklabels=(np.arange(startTime, duration+startTime, freqXlabels)) if xticks else [],xticks=np.around(np.arange(math.ceil(startTime)-startTime, duration, freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
+    xticklabels=np.around(np.arange(startTime, duration+startTime, freqXlabels) ).astype(int) if xticks else [], 
     ylim=(0, 5000),
     yticks=[0, 2e3, 4e3] if yticks else [], 
     yticklabels=['0', '2k', '4k'] if yticks else [])
@@ -288,29 +313,33 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
         ax = drawAnnotation(cyclePath, onsetPath, onsetTimeKeyword, onsetLabelKeyword, numDiv, startTime, duration, ax, c=cAnnot, annotLabel=annotLabel)
     return ax
 
-def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, cAnnot='purple', annotLabel=True, odf=False, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black'):
+def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, yticks=True, xlabel=True, ylabel=True, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, cAnnot='purple', annotLabel=True, odf=False, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black', title='Waveform'):
     '''Plots the wave plot of the audio
 
-    audio: loaded audio time series
-    sr: sample rate that audio time series is loaded/ is to be loaded in
-    audioPath: path to the audio file
-    startTime: time to start reading the audio at
-    duration: duration of audio to load
-    ax: axis to plot waveplot in
-    xticks: if True, will plot xticklabels
-    freqXlabels: time (in seconds) after which each x label occurs
-    annotate: if True, will annotate tala markings
-    cyclePath: path to file with tala cycle annotations
-    numDiv: number of divisions to put between each annotation marking
-    onsetPath: path to file with onset annotations; only considered if cyclePath is None
-    cAnnot: colour for the annotation marking
-    annotLabel: if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
-    odf: if True, will plot the onset detection function over the wave form
-    winSize_odf: window size, fed to the onset detection function; valid only if odf is true
-    hopSize_odf: hop size in seconds, fed to the onset detection function; valid only if odf is true
-    nFFT_odf: size of DFT used in onset detection function; valid only if odf is true
-    source_odf: type of instrument - vocal or pakhawaj, fed to odf; valid only if odf is true
+    audio (np.ndarray): loaded audio time series
+    sr (int): sample rate that audio time series is loaded/ is to be loaded in
+    audioPath (str): path to the audio file
+    startTime (float): time to start reading the audio at
+    duration (float): duration of audio to load
+    ax (plt.Axes.axes): axis to plot waveplot in
+    xticks (bool): if True, will plot xticklabels
+    yticks (bool): if True, will plot yticklabels
+    xlabel (bool): if True, will add a x label
+    ylabel (bool): if True will add a y label
+    freqXlabels (float): time (in seconds) after which each x label occurs
+    annotate (bool): if True, will annotate tala markings
+    cyclePath (str): path to file with tala cycle annotations
+    numDiv (int): number of divisions to put between each annotation marking
+    onsetPath (str): path to file with onset annotations; only considered if cyclePath is None
+    cAnnot: colour for the annotation marking; input to the ax.annotate function for the colour (c) parameter; used only if annotate is True
+    annotLabel (bool): if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
+    odf (bool): if True, will plot the onset detection function over the wave form
+    winSize_odf (float): window size in seconds, fed to the onset detection function; valid only if odf is true
+    hopSize_odf (float): hop size in seconds, fed to the onset detection function; valid only if odf is true
+    nFFT_odf (int): size of DFT used in onset detection function; valid only if odf is true
+    source_odf (str): type of instrument - vocal or pakhawaj, fed to odf; valid only if odf is true
     cOdf: colour to plot onset detection function in; valid only if odf is true
+    title (str): title of the plot
     '''
     if ax is None:
         Exception('ax parameter has to be provided')
@@ -323,19 +352,80 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
         audio = audio[:int(duration*sr)]    # ensure that audio length = duration
 
     waveplot(audio, sr, ax=ax)
-    ax.set(xlabel='' if not xticks else 'Time (s)', 
+    if odf:
+        plotODF(audio=audio, sr=sr, startTime=0, duration=None, ax=ax, winSize_odf=winSize_odf, hopSize_odf=hopSize_odf, nFFT_odf=nFFT_odf, source_odf=source_odf, cOdf=cOdf, ylim=True)
+    ax.set(xlabel='' if not xlabel else 'Time (s)', 
+    ylabel = '' if not ylabel else 'Amplitude',
     xlim=(0, duration), 
     xticks=[] if not xticks else np.around(np.arange(0, duration, freqXlabels)),
     xticklabels=[] if not xticks else np.around(np.arange(startTime, duration+startTime, freqXlabels), 2),
-    title='Waveplot')
-    if odf:
-        odf_vals, _, _ = getOnsetActivation(x=audio, audioPath=None, startTime=0, endTime=duration, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
-        ax.plot(np.arange(0, duration, hopSize_odf), odf_vals[:-1], c=cOdf)     # plot odf_vals and consider odf_vals for all values except the last frame
-        max_abs_val = max(abs(min(odf_vals)), abs(max(odf_vals)))   # find maximum value to set y limits to ensure symmetrical plot
-        ax.set(ylim=(-max_abs_val, max_abs_val))
+    yticks=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 2), 
+    yticklabels=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 2), 
+    title=title)
     if annotate:
         ax = drawAnnotation(cyclePath=cyclePath, onsetPath=onsetPath, numDiv=numDiv, startTime=startTime, duration=duration, ax=ax, c=cAnnot, annotLabel=annotLabel)
-    return ax, pd.DataFrame({'Time': np.arange(0, duration, hopSize_odf), 'ODF': odf_vals[:-1]})
+    
+    return ax
+
+def plotODF(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black', freqXlabels=5, ylim=True, xlabel=False, ylabel=False, xticks=False, yticks=False, title='Onset Detection Function'):
+    '''
+    Plots onset detection function if ax is provided. If not returns an a tuple with 2 arrays - onset detection function values and time stamps
+
+    audio (np.ndarray): loaded audio time series
+    sr (int): sample rate that audio time series is loaded/ is to be loaded in
+    audioPath (str): path to the audio file
+    startTime (float): time to start reading the audio at
+    duration (float): duration of audio to load
+    ax (plt.Axes.axes): axis to plot waveplot in
+    winSize_odf (float): window size in seconds, fed to the onset detection function
+    hopSize_odf (float): hop size in seconds, fed to the onset detection function
+    nFFT_odf (int): size of DFT used in onset detection function
+    source_odf (str): type of instrument - vocal or pakhawaj, fed to odf
+    cOdf: colour to plot onset detection function in
+    freqXlabels (float): time (in seconds) after which each x label occurs
+    ylim (bool): if True, will reset the ylim to the range of the output of the ODF function; this is added because when the ODF is plotted over another plot, say the waveform, it is easier to see if the ylim is readjusted
+    xticks (bool): if True, will plot xticklabels
+    yticks (bool): if True, will plot yticklabels
+    xlabel (bool): if True, will add a x label
+    ylabel (bool): if True will add a y label
+    title (str): title of the plot
+
+    Returns
+        ax (matplotlib.Axes.axes): if ax is not None, returns a plot
+        (odf_vals, time_vals): if ax is None, returns a tuple with ODF values and time stamps.
+    '''
+
+    startTime = math.floor(startTime)   # set start time to an integer, for better readability on the x axis of the plot
+    if audio is None:
+        audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
+    if duration is None:
+        duration = librosa.get_duration(audio, sr=sr)
+        duration = math.floor(duration)  # set duration to an integer, for better readability on the x axis of the plot
+        audio = audio[:int(duration*sr)]    # ensure that audio length = duration
+
+    odf_vals, _, _ = getOnsetActivation(x=audio, audioPath=None, startTime=startTime, endTime=duration+startTime, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
+    
+    # set time and odf values in variables
+    time_vals = np.arange(0, duration, hopSize_odf)
+    odf_vals = odf_vals[:-1]    # disregard the last frame of odf_vals since it is centered around the frame at time stamp 'duration'
+
+    if ax is None:
+        # if ax is None, return (odf_vals, time_vals)
+        return (odf_vals, time_vals)
+    else:
+        ax.plot(time_vals, odf_vals[:-1], c=cOdf)     # plot odf_vals and consider odf_vals for all values except the last frame
+        max_abs_val = max(abs(min(odf_vals)), abs(max(odf_vals)))   # find maximum value to set y limits to ensure symmetrical plot
+        # set ax parameters only if they are not None
+        ax.set(xlabel='' if not xlabel else 'Time (s)', 
+        ylabel = '' if not ylabel else 'ODF',
+        xlim=(0, duration), 
+        xticks=[] if not xticks else np.around(np.arange(0, duration, freqXlabels)),
+        xticklabels=[] if not xticks else np.around(np.arange(startTime, duration+startTime, freqXlabels), 2),
+        yticks=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 2), 
+        yticklabels=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 2), 
+        ylim= ax.get_ylim() if not ylim else (-max_abs_val, max_abs_val),
+        title=title) 
+        return ax
 
 def plotEnergy(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, cAnnot='purple', annotLabel=True, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black'):
     '''
@@ -368,6 +458,7 @@ def plotEnergy(audio=None, sr=16000, audioPath=None, startTime=0, duration=None,
     startTime = math.floor(startTime)   # set start time to an integer, for better readability on the x axis of the plot
     if audio is None:
         audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
+        audio /= np.max(np.abs(audio))
     if duration is None:
         duration = librosa.get_duration(audio, sr=sr)
         duration = math.floor(duration)  # set duration to an integer, for better readability on the x axis of the plot
@@ -406,7 +497,7 @@ def playAudioWClicks(audio=None, sr=16000, audioPath=None, startTime=0, duration
     '''Plays relevant part of audio along with clicks at timestamps in onsetTimes
 
     Parameters
-        audio (np.array): loaded audio sample
+        audio (np.ndarray): loaded audio sample
         sr (float): sample rate of audio
         audioPath (str): path to audio file
         startTime (float): time to start reading audio at
