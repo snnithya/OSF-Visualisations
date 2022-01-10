@@ -8,3 +8,6 @@ Scripts_Manual_v1.docx
 Time and rhythm in Hindustani music_Examples.docx
 test.ipynb
 Fig 9/pretrained_models/
+onsetExample/pretrained_models/
+onsetExample/*.png
+utils-rohit.py
