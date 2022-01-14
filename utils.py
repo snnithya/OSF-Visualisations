@@ -11,6 +11,8 @@ import parselmouth
 import math
 import soundfile as sf
 import ffmpeg
+import utils_fmp as fmp
+
 sns.set_theme(rc={"xtick.bottom" : True, "ytick.left" : False, "xtick.major.size":4, "xtick.minor.size":2, "ytick.major.size":4, "ytick.minor.size":2, "xtick.labelsize": 10, "ytick.labelsize": 10})
 
 def readCycleAnnotation(cyclePath, numDiv, startTime, duration):
@@ -403,7 +405,7 @@ def plotODF(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax
         duration = math.floor(duration)  # set duration to an integer, for better readability on the x axis of the plot
         audio = audio[:int(duration*sr)]    # ensure that audio length = duration
 
-    odf_vals, _, _ = getOnsetActivation(x=audio, audioPath=None, startTime=startTime, endTime=duration+startTime, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
+    odf_vals, _, _ = getOnsetActivation(x=audio, audioPath=None, startTime=startTime, duration=duration, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
     
     # set time and odf values in variables
     time_vals = np.arange(0, duration, hopSize_odf)
@@ -470,7 +472,7 @@ def plotEnergy(audio=None, sr=16000, audioPath=None, startTime=0, duration=None,
     title='Energy Contour', 
     ylabel='dB')
 
-    _, _, energy = getOnsetActivation(x=audio, audioPath=None, startTime=0, endTime=duration, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
+    _, _, energy = getOnsetActivation(x=audio, audioPath=None, startTime=0, duration=duration, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
     ax.plot(np.arange(0, duration, hopSize_odf), energy[:-1], c=cOdf)
     if annotate:
         ax = drawAnnotation(cyclePath=cyclePath, onsetPath=onsetPath, numDiv=numDiv, startTime=startTime, duration=duration, ax=ax, c=cAnnot, annotLabel=annotLabel)
@@ -646,19 +648,19 @@ def biphasicDerivative(x, tHop, norm=1, rectify=1):
         x*=(x>0)
     return x
 
-def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=16000, winSize=0.4, hopSize=0.01, nFFT=1024, source='vocal'):
+def getOnsetActivation(x=None, audioPath=None, startTime=0, duration=None, fs=16000, winSize=0.4, hopSize=0.01, nFFT=1024, source='vocal'):
     '''Computes onset activation function
 
     Parameters
         x: audio signal array
         audioPath: path to the audio file
         startTime: time to start reading the audio at
-        endTime: time to stop reading audio at
+        duration: duration of audio to read
         fs: sampling rate to read audio at
         winSize: window size in seconds for STFT
         hopSize: hop size in seconds for STFT
         nFFT: DFT size
-        source: choice of instrument - vocal or pakhawaj
+        source: choice of instrument - 'vocal' or 'perc' (percussion)
 
     Returns
         odf: the frame-wise onset activation function (at a sampling rate of 1/hopSize)
@@ -672,9 +674,15 @@ def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=160
     if x is not None:
         x = fadeIn(x,int(0.5*fs))
         x = fadeOut(x,int(0.5*fs))
-        x = x[int(np.ceil(startTime*fs)):int(np.ceil(endTime*fs))]
+        if duration is None:
+            duration = len(x)/fs - startTime
+        x = x[int(np.ceil(startTime*fs)):int(np.ceil(startTime+duration))]
+
     elif audioPath is not None:
-        x, _ = librosa.load(audioPath, sr=fs, offset=startTime, duration=endTime-startTime)
+        if duration is None:
+            duration = librosa.get_duration(audioPath, sr=fs)
+            duration = math.floor(duration)
+        x,_ = librosa.load(audioPath, sr=fs, offset=startTime, duration=duration)
     else:
         print('Provide either the audio signal or path to the stored audio file on disk')
         raise
@@ -682,7 +690,7 @@ def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=160
     X,_ = librosa.magphase(librosa.stft(x,win_length=winSize, hop_length=hopSize, n_fft=nFFT))
 
     if source=='vocal':
-        sub_band = [600,2500]
+        sub_band = [600,2400]
         odf = subBandEner(X, fs, sub_band)
         odf = to_dB(odf, 100)
         energy = odf.copy()
@@ -690,41 +698,15 @@ def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=160
 
         onsets = librosa.onset.onset_detect(onset_envelope=odf.copy(), sr=fs, hop_length=hopSize, pre_max=4, post_max=4, pre_avg=6, post_avg=6, wait=50, delta=0.12)*hopSize/fs
 
-    else:
+    elif source=='perc':
         sub_band = [0,fs/2]
-        odf = spectralFlux(X, fs, sub_band, aMin=1e-4, normalize=True)
+        odf = fmp.spectral_flux(x, Fs=fs, N=nFFT, W=winSize, H=hopSize, M=20, band=sub_band)
         energy = odf.copy()
         odf = biphasicDerivative(odf, hopSize, norm=1, rectify=1)
 
         onsets = librosa.onset.onset_detect(onset_envelope=odf, sr=fs, hop_length=hopSize, pre_max=1, post_max=1, pre_avg=1, post_avg=1, wait=10, delta=0.05)*hopSize/fs
 
     return odf, onsets, energy
-
-def spectralFlux(X, fs, band, aMin=1e-4, normalize=True):
-    '''Computes 1st order rectified spectral flux (difference) of a given STFT input
-    
-    Parameters
-        X: input STFT matrix
-        fs: sampling rate of audio signal
-        band: frequency band over which to compute flux from STFT (sub-band spectral flux)
-        aMin: lower threshold value to prevent log(0)
-        normalize: whether to normalize output before returning
-
-    Returns
-        specFlux: array with frame-wise spectral flux values
-    '''
-
-    X = 20*np.log10(aMin+abs(X)/np.max(np.abs(X)))
-    binLow = int(band[0]*X.shape[0]/(fs/2))
-    binHi = int(band[1]*X.shape[0]/(fs/2))
-    specFlux = np.array([0])
-    for hop in range(1,X.shape[1]):
-        diff = X[binLow:binHi,hop]-X[binLow:binHi,hop-1]
-        diff = (diff + abs(diff))/2
-        specFlux=np.append(specFlux,sum(diff))
-    if normalize:
-        specFlux/=max(specFlux)
-    return specFlux
     
 def fadeIn(x,length):
 	fade_func = np.ones(len(x))
@@ -738,104 +720,75 @@ def fadeOut(x,length):
 	x*=fade_func
 	return x
 
-def ACF_DFT_sal(signal, t_ACF_lag, t_ACF_frame, t_ACF_hop, fs):
-    n_ACF_lag = int(t_ACF_lag*fs)
-    n_ACF_frame = int(t_ACF_frame*fs)
-    n_ACF_hop = int(t_ACF_hop*fs)
+def autoCorrelationFunction(signal, maxLag, winSize, hopSize, fs):
+    n_ACF_lag = int(maxLag*fs)
+    n_ACF_frame = int(winSize*fs)
+    n_ACF_hop = int(hopSize*fs)
     signal = subsequences(signal, n_ACF_frame, n_ACF_hop)
     ACF = np.zeros((len(signal), n_ACF_lag))
     for i in range(len(ACF)):
         ACF[i][0] = np.dot(signal[i], signal[i])
         for j in range(1, n_ACF_lag):
             ACF[i][j] = np.dot(signal[i][:-j], signal[i][j:])
-    DFT = (abs(np.fft.rfft(signal)))
-    sal = np.zeros(len(ACF))
-    for i in range(len(ACF)):
-        sal[i] = max(ACF[i])
     for i in range(len(ACF)):
         if max(ACF[i])!=0:
             ACF[i] = ACF[i]/max(ACF[i])
-        if max(DFT[i])!=0:
-            DFT[i] = DFT[i]/max(DFT[i])
-    return (ACF, DFT, sal)
+    return ACF
 
 def subsequences(signal, frame_length, hop_length):
     shape = (int(1 + (len(signal) - frame_length)/hop_length), frame_length)
     strides = (hop_length*signal.strides[0], signal.strides[0])
     return np.lib.stride_tricks.as_strided(signal, shape=shape, strides=strides)
 
-def plot_matrix(X, Fs=1, Fs_F=1, T_coef=None, F_coef=None, xlabel='Time (seconds)', ylabel='Frequency (Hz)', title='',
-                dpi=72, colorbar=True, colorbar_aspect=20.0, ax=None, figsize=(6, 3), **kwargs):
-    """Plot a matrix, e.g. a spectrogram or a tempogram (function from Notebook: B/B_PythonVisualization.ipynb in [2])
+def tempoPeriodCandidates(ACF, fs, norm=1):
+    L = np.shape(ACF)[1]
+    min_lag = 10
+    max_lag = L     # Reduce if expected tempo reduces
+    N_peaks = 11    # Reduce if L is reduced
  
-    Args:
-        X: The matrix
-        Fs: Sample rate for axis 1
-        Fs_F: Sample rate for axis 0
-        T_coef: Time coeffients. If None, will be computed, based on Fs.
-        F_coef: Frequency coeffients. If None, will be computed, based on Fs_F.
-        xlabel: Label for x axis
-        ylabel: Label for y axis
-        title: Title for plot
-        dpi: Dots per inch
-        colorbar: Create a colorbar.
-        colorbar_aspect: Aspect used for colorbar, in case only a single axes is used.
-        ax: Either (1.) a list of two axes (first used for matrix, second for colorbar), or (2.) a list with a single
-            axes (used for matrix), or (3.) None (an axes will be created).
-        figsize: Width, height in inches
-        **kwargs: Keyword arguments for matplotlib.pyplot.imshow
+    window = zeros((L, L))
+    for j in range(min_lag, max_lag):
+        C = j*np.arange(1, N_peaks)
+        D = np.concatenate((C, C+1, C-1, C+2, C-2, C+3, C-3))
+        D = D[D<L]
+        norm_factor = len(D)
+        if norm == 1:
+            window[j][D] = 1.0/norm_factor
+        else:
+            window[j][D] = 1.0
+            
+    tempo_period_candidates = np.dot(ACF, transpose(window))
+    return tempo_period_candidates
 
-    Returns:
-        fig: The created matplotlib figure or None if ax was given.
-        ax: The used axes.
-        im: The image plot
-    """
-    fig = None
-    if ax is None:
-        fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
-        ax = [ax]
-    if T_coef is None:
-        T_coef = np.arange(X.shape[1]) / Fs
-    if F_coef is None:
-        F_coef = np.arange(X.shape[0]) / Fs_F
+def viterbiSmoothing(data, fs, transitionPenalty):
+    T = np.shape(data)[0]
+    L = np.shape(data)[1]
 
-    if 'extent' not in kwargs:
-        x_ext1 = (T_coef[1] - T_coef[0]) / 2
-        x_ext2 = (T_coef[-1] - T_coef[-2]) / 2
-        y_ext1 = (F_coef[1] - F_coef[0]) / 2
-        y_ext2 = (F_coef[-1] - F_coef[-2]) / 2
-        kwargs['extent'] = [T_coef[0] - x_ext1, T_coef[-1] + x_ext2, F_coef[0] - y_ext1, F_coef[-1] + y_ext2]
-    if 'cmap' not in kwargs:
-        kwargs['cmap'] = 'gray_r'
-    if 'aspect' not in kwargs:
-        kwargs['aspect'] = 'auto'
-    if 'origin' not in kwargs:
-        kwargs['origin'] = 'lower'
+    p1 = transitionPenalty
 
-    im = ax[0].imshow(X, **kwargs)
+    cost=ones((T,L//2))*1e8
+    m=zeros((T,L//2))
 
-    if len(ax) == 2 and colorbar:
-        plt.colorbar(im, cax=ax[1])
-    elif len(ax) == 2 and not colorbar:
-        ax[1].set_axis_off()
-    elif len(ax) == 1 and colorbar:
-        plt.sca(ax[0])
-        plt.colorbar(im, aspect=colorbar_aspect)
-
-    ax[0].set_xlabel(xlabel, fontsize=14)
-    ax[0].set_ylabel(ylabel, fontsize=14)
-    ax[0].set_title(title, fontsize=18)
-
-    if fig is not None:
-        plt.tight_layout()
-
-    return fig, ax, im
+    for i in range(1,T):
+        for j in range(1,L//2):
+            cost[i][j]=cost[i-1][1]+p1*abs(60.0*fs/j-60.0*fs)-data[i][j]
+            for k in range(2,L//2):
+                if cost[i][j]>cost[i-1][k]+p1*abs(60.0*fs/j-60.0*fs/k)-data[i][j]:
+                    cost[i][j]=cost[i-1][k]+p1*abs(60.0*fs/j-60.0*fs/k)-data[i][j]
+                    m[i][j]=int(k)
+                    
+    tempo_period_smoothed=zeros(T)
+    tempo_period_smoothed[T-1]=argmin(cost[T-1,1:])/float(fs)
+    t=int(m[T-1,argmin(cost[T-1,1:])])
+    i=T-2
+    while(i>=0):
+        tempo_period_smoothed[i]=t/float(fs)
+        t=int(m[i][t])
+        i=i-1
+    return tempo_period_smoothed
 
 '''
 References
-
-[1] Rao, P., Vinutha, T.P. and Rohit, M.A., 2020. Structural Segmentation of Alap in Dhrupad Vocal Concerts. 
-    Transactions of the International Society for Music Information Retrieval, 3(1), pp.137–152. DOI: http://doi.org/10.5334/tismir.64
-[2] Meinard Müller and Frank Zalkow: FMP Notebooks: Educational Material for Teaching and Learning Fundamentals of Music Processing. 
-    Proceedings of the International Conference on Music Information Retrieval (ISMIR), Delft, The Netherlands, 2019.
+[1] Rao, P., Vinutha, T.P. and Rohit, M.A., 2020. Structural Segmentation of Alap in Dhrupad Vocal Concerts. Transactions of the International Society for Music Information Retrieval, 3(1), pp.137–152. DOI: http://doi.org/10.5334/tismir.64
+[2] T.P. Vinutha, S. Suryanarayana, K. K. Ganguli and P. Rao " Structural segmentation and visualization of Sitar and Sarod concert audio ", Proc. of the 17th International Society for Music Information Retrieval Conference (ISMIR), Aug 2016, New York, USA
 '''
