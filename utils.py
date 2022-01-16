@@ -13,6 +13,7 @@ import soundfile as sf
 import ffmpeg
 import utils_fmp as fmp
 
+#set seaborn theme parameters for plots
 sns.set_theme(rc={"xtick.bottom" : True, "ytick.left" : False, "xtick.major.size":4, "xtick.minor.size":2, "ytick.major.size":4, "ytick.minor.size":2, "xtick.labelsize": 10, "ytick.labelsize": 10})
 
 def readCycleAnnotation(cyclePath, numDiv, startTime, duration):
@@ -371,7 +372,7 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 
 def plotODF(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black', freqXlabels=5, ylim=True, xlabel=False, ylabel=False, xticks=False, yticks=False, title='Onset Detection Function'):
     '''
-    Plots onset detection function if ax is provided. If not returns an a tuple with 2 arrays - onset detection function values and time stamps
+    Plots onset detection function if ax is provided. If not returns a tuple with 2 arrays - onset detection function values and time stamps
 
     audio (np.ndarray): loaded audio time series
     sr (int): sample rate that audio time series is loaded/ is to be loaded in
@@ -586,20 +587,9 @@ def generateFig(noRows, figSize=(14, 7), heightRatios=None):
     axs = [fig.add_subplot(specs[i, 0]) for i in range(noRows)]
     return fig, axs
 
-def to_dB(x, C):
-    '''Applies logarithmic (base 10) transformation
-    
-    Parameters
-        x: input signal
-        C: scaling constant
-    
-    Returns
-        log-scaled x
-    '''
-    return np.log10(1 + x*C)/(np.log10(1+C))
-
+## Onset detection related
 def subBandEner(X,fs,band):
-    '''Computes spectral sub-band energy (suitable for vocal onset detection)
+    '''Computes spectral sub-band energy by summing squared magnitude values of STFT over specified spectral band (suitable for vocal onset detection)
 
     Parameters
         X: STFT of an audio signal x
@@ -610,46 +600,71 @@ def subBandEner(X,fs,band):
         sbe: array with each value representing the magnitude STFT values in a short-time frame squared & summed over the sub-band
     '''
 
+    #convert band edge frequencies to bin numbers
     binLow = int(np.ceil(band[0]*X.shape[0]/(fs/2)))
     binHi = int(np.ceil(band[1]*X.shape[0]/(fs/2)))
+
+    #compute sub-band energy
     sbe = np.sum(np.abs(X[binLow:binHi])**2, 0)
+
     return sbe
 
-def biphasicDerivative(x, tHop, norm=1, rectify=1):
-    '''Computes a biphasic derivative (See [1] for a detailed explanation of the algorithm)
+def biphasicDerivative(x, hopDur, norm=1, rectify=1):
+    '''Computes the biphasic derivative of a signal(See [1] for a detailed explanation of the algorithm)
     
     Parameters
         x: input signal
-        tHop: frame- or hop-length used to obtain input signal values (reciprocal of sampling rate of x)
-        norm: if output is to be normalized
-        rectify: if output is to be rectified to keep only positive values (sufficient for peak-picking)
+        hopDur: sampling interval in seconds of input signal (reciprocal of sampling rate of x)
+        norm (1 or 0): if output is to be normalized
+        rectify (1 or 0): if output is to be rectified to keep only positive values (sufficient for peak-picking)
     
     Returns
-        x: after performing the biphasic derivative of input x (i.e, convolving with a biphasic derivative filter)
+        x: after computing the biphasic derivative of input (i.e, convolving with a biphasic derivative filter)
 
     '''
 
-    n = np.arange(-0.1, 0.1, tHop)
-    tau1 = 0.015  # = (1/(T_1*sqrt(2))) || -ve lobe width
-    tau2 = 0.025  # = (1/(T_2*sqrt(2))) || +ve lobe width
+    #sampling instants
+    n = np.arange(-0.1, 0.1, hopDur)
+
+    #filter parameters (see [1] for explanation)
+    tau1 = 0.015  # -ve lobe width
+    tau2 = 0.025  # +ve lobe width
     d1 = 0.02165  # -ve lobe position
     d2 = 0.005  # +ve lobe position
+
+    #filter
     A = np.exp(-pow((n-d1)/(np.sqrt(2)*tau1), 2))/(tau1*np.sqrt(2*np.pi))
     B = np.exp(-pow((n+d2)/(np.sqrt(2)*tau2), 2))/(tau2*np.sqrt(2*np.pi))
     biphasic = A-B
+
+    #convolve with input and invert
     x = np.convolve(x, biphasic, mode='same')
     x = -1*x
 
+    #normalise and rectify
     if norm==1:
         x/=np.max(x)
         x-=np.mean(x)
 
     if rectify==1:
         x*=(x>0)
+
     return x
 
+def toDB(x, C):
+    '''Applies logarithmic (base 10) transformation (based on [1])
+    
+    Parameters
+        x: input signal
+        C: scaling constant
+    
+    Returns
+        log-scaled x
+    '''
+    return np.log10(1 + x*C)/(np.log10(1+C))
+
 def getOnsetActivation(x=None, audioPath=None, startTime=0, duration=None, fs=16000, winSize=0.4, hopSize=0.01, nFFT=1024, source='vocal'):
-    '''Computes onset activation function
+    '''Computes onset activation function from audio signal using short-time spectrum based methods
 
     Parameters
         x: audio signal array
@@ -667,87 +682,154 @@ def getOnsetActivation(x=None, audioPath=None, startTime=0, duration=None, fs=16
         onsets: time locations of detected onset peaks in the odf (peaks detected using peak picker from librosa)
     '''
 
+    #convert short-time analysis parameters from seconds to frames
     winSize = int(np.ceil(winSize*fs))
     hopSize = int(np.ceil(hopSize*fs))
     nFFT = int(2**(np.ceil(np.log2(winSize))))
     
+    #if audio signal is provided
     if x is not None:
-        x = fadeIn(x,int(0.5*fs))
-        x = fadeOut(x,int(0.5*fs))
+        #select segment of interest from audio based on start time and duration
         if duration is None:
             duration = len(x)/fs - startTime
         x = x[int(np.ceil(startTime*fs)):int(np.ceil(startTime+duration))]
 
+    #if audio path is provided
     elif audioPath is not None:
         if duration is None:
             duration = librosa.get_duration(audioPath, sr=fs)
             duration = math.floor(duration)
         x,_ = librosa.load(audioPath, sr=fs, offset=startTime, duration=duration)
+
     else:
         print('Provide either the audio signal or path to the stored audio file on disk')
         raise
 
+    #fade in and out ends of audio to prevent spurious onsets due to abrupt start and end
+    x = fadeIn(x,int(0.5*fs))
+    x = fadeOut(x,int(0.5*fs))
+
+    #compute magnitude STFT
     X,_ = librosa.magphase(librosa.stft(x,win_length=winSize, hop_length=hopSize, n_fft=nFFT))
 
+    #use sub-band energy -> log transformation -> biphasic filtering, if vocal onset detection [1]
     if source=='vocal':
-        sub_band = [600,2400]
+        sub_band = [600,2400] #Hz
         odf = subBandEner(X, fs, sub_band)
-        odf = to_dB(odf, 100)
-        energy = odf.copy()
+        odf = toDB(odf, 100)
         odf = biphasicDerivative(odf, hopSize/fs, norm=1, rectify=1)
 
+        #get onset locations using librosa's peak-picking function
         onsets = librosa.onset.onset_detect(onset_envelope=odf.copy(), sr=fs, hop_length=hopSize, pre_max=4, post_max=4, pre_avg=6, post_avg=6, wait=50, delta=0.12)*hopSize/fs
 
+    #use spectral flux method (from FMP notebooks [2])
     elif source=='perc':
-        sub_band = [0,fs/2]
+        sub_band = [0,fs/2] #full band
         odf = fmp.spectral_flux(x, Fs=fs, N=nFFT, W=winSize, H=hopSize, M=20, band=sub_band)
-        energy = odf.copy()
-        odf = biphasicDerivative(odf, hopSize, norm=1, rectify=1)
-
         onsets = librosa.onset.onset_detect(onset_envelope=odf, sr=fs, hop_length=hopSize, pre_max=1, post_max=1, pre_avg=1, post_avg=1, wait=10, delta=0.05)*hopSize/fs
 
-    return odf, onsets, energy
+    return odf, onsets
     
 def fadeIn(x,length):
-	fade_func = np.ones(len(x))
-	fade_func[:length] = np.hanning(2*length)[:length]
-	x*=fade_func
+    """
+    Apply fade-in to the beginning of an audio signal using a hanning window
+    
+    Parameters:
+    x: signal
+    length: length of fade
+    
+    Returns:
+    faded-in signal
+    """
+	x[:length] *= np.hanning(2*length)[:length]
 	return x
 
 def fadeOut(x,length):
-	fade_func = np.ones(len(x))
-	fade_func[-length:] = np.hanning(2*length)[length:]
-	x*=fade_func
+    """
+    Apply fade-out to the end of an audio signal using a hanning window
+    
+    Parameters:
+    x: signal
+    length: length of fade
+    
+    Returns:
+    faded-out signal
+    """
+	x[-length:] *= np.hanning(2*length)[length:]
 	return x
 
-def autoCorrelationFunction(signal, maxLag, winSize, hopSize, fs):
+def autoCorrelationFunction(x, fs, maxLag, winSize, hopSize):
+    """
+    Compute short-time autocorrelation of a signal and normalise every frame by the maximum correlation value
+    
+    Parameters:
+    x: input signal
+    fs: sampling rate
+    maxLag: maximum lag/shift in seconds upto which correlation is to be found (ACF is computed for every single sample shift value lesser than this limit)
+    winSize: length in seconds of the signal selected for short-time autocorrelation
+    hopSize: hop duration in seconds between successive windowed signal segments (not the same as lag/shift)
+    
+    Returns:
+    short-time ACF matrix of dim: (#frames, #lags)
+    """
+
+    #convert parameters to frames from seconds
     n_ACF_lag = int(maxLag*fs)
     n_ACF_frame = int(winSize*fs)
     n_ACF_hop = int(hopSize*fs)
-    signal = subsequences(signal, n_ACF_frame, n_ACF_hop)
-    ACF = np.zeros((len(signal), n_ACF_lag))
+
+    #split input signal into windowed segments
+    x = subsequences(x, n_ACF_frame, n_ACF_hop)
+
+    #compute ACF for each windowed segment
+    ACF = np.zeros((len(x), n_ACF_lag))
     for i in range(len(ACF)):
-        ACF[i][0] = np.dot(signal[i], signal[i])
+        ACF[i][0] = np.dot(x[i], x[i])
         for j in range(1, n_ACF_lag):
-            ACF[i][j] = np.dot(signal[i][:-j], signal[i][j:])
+            ACF[i][j] = np.dot(x[i][:-j], x[i][j:])
+
+    #normalise each ACF vector (every row) by max value
     for i in range(len(ACF)):
         if max(ACF[i])!=0:
             ACF[i] = ACF[i]/max(ACF[i])
+
     return ACF
 
-def subsequences(signal, frame_length, hop_length):
-    shape = (int(1 + (len(signal) - frame_length)/hop_length), frame_length)
-    strides = (hop_length*signal.strides[0], signal.strides[0])
-    return np.lib.stride_tricks.as_strided(signal, shape=shape, strides=strides)
+def subsequences(x, winSize, hopSize):
+    """
+    Split signal into shorter windowed segments with a specified hop between consecutive windows
+    
+    Parameters:
+    x: input signal
+    winSize: size of short-time window in seconds
+    hopSize: hop duration in seconds between consecutive windows
+    
+    Returns:
+    numpy array containing windowed segments
+    """
 
-def tempoPeriodCandidates(ACF, fs, norm=1):
+    #calculate shape of output numpy array (#rows based on #windows obtained using provided window and hop sizes)
+    shape = (int(1 + (len(x) - winSize)/hopSize), winSize)
+
+    strides = (hopSize*x.strides[0], x.strides[0])
+    return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
+
+def tempoPeriodLikelihood(ACF, norm=1):
+    """
+    Compute from ACF, the likelihood of each ACF lag being the time-period of the tempo. Likelihood is obtained by taking a dot product between the ACF vector and a comb-filter (see [3] for details)
+    
+    Parameters:
+    ACF: acf matrix of a signal
+    norm: 
+    
+    Returns:
+    2d np array (of same dim as input acf matrix) with a likelihood value for each candidate lag in each time frame
+    """
     L = np.shape(ACF)[1]
-    min_lag = 10
-    max_lag = L     # Reduce if expected tempo reduces
-    N_peaks = 11    # Reduce if L is reduced
- 
+    N_peaks = 11 # ?
+
     window = zeros((L, L))
-    for j in range(min_lag, max_lag):
+    for j in range(L):
         C = j*np.arange(1, N_peaks)
         D = np.concatenate((C, C+1, C-1, C+2, C-2, C+3, C-3))
         D = D[D<L]
@@ -760,21 +842,35 @@ def tempoPeriodCandidates(ACF, fs, norm=1):
     tempo_period_candidates = np.dot(ACF, transpose(window))
     return tempo_period_candidates
 
-def viterbiSmoothing(data, fs, transitionPenalty):
-    T = np.shape(data)[0]
-    L = np.shape(data)[1]
+def viterbiSmoothing(tempoPeriodLikelihood, hopDur, transitionPenalty, tempoRange=(30,100)):
+    """
+    Apply viterbi smoothing on tempo period (lag) likelihood values to find optimum sequence of tempo values across audio frames (based on [3])
+    
+    Parameters:
+    tempoPeriodLikelihood: matrix of likelihood values at each tempo period (lag)
+    hopDur: short-time analysis hop duration in seconds between samples of ACF vector (not hop duration between windowed signal segments taken for ACF)
+    transitionPenalty: multiplicative factor applied to magnitude of change in tempo between frames; high value penalises larger jumps more, suitable for metric tempo that changes gradually across a concert and not abruptly
+    tempoRange: tuple of expected min and max tempo in BPM
+    """
 
-    p1 = transitionPenalty
+    #convert tempo range to tempo period (in frames) range
+    fs = 1/hopDur
+    tempoRange *= (fs/60)
 
-    cost=ones((T,L//2))*1e8
-    m=zeros((T,L//2))
+    #initialise cost matrix with very high values
+    T,L = np.shape(tempoPeriodLikelihood)
+    cost = ones((T,L//2))*1e8
 
+    #
+    m = zeros((T,L//2))
+
+    #compute cost value at each lag (within range), at each time frame
     for i in range(1,T):
         for j in range(1,L//2):
-            cost[i][j]=cost[i-1][1]+p1*abs(60.0*fs/j-60.0*fs)-data[i][j]
+            cost[i][j]=cost[i-1][1]+transitionPenalty*abs(60.0*fs/j-60.0*fs)-tempoPeriodLikelihood[i][j]
             for k in range(2,L//2):
-                if cost[i][j]>cost[i-1][k]+p1*abs(60.0*fs/j-60.0*fs/k)-data[i][j]:
-                    cost[i][j]=cost[i-1][k]+p1*abs(60.0*fs/j-60.0*fs/k)-data[i][j]
+                if cost[i][j]>cost[i-1][k]+transitionPenalty*abs(60.0*fs/j-60.0*fs/k)-tempoPeriodLikelihood[i][j]:
+                    cost[i][j]=cost[i-1][k]+transitionPenalty*abs(60.0*fs/j-60.0*fs/k)-tempoPeriodLikelihood[i][j]
                     m[i][j]=int(k)
                     
     tempo_period_smoothed=zeros(T)
@@ -790,5 +886,6 @@ def viterbiSmoothing(data, fs, transitionPenalty):
 '''
 References
 [1] Rao, P., Vinutha, T.P. and Rohit, M.A., 2020. Structural Segmentation of Alap in Dhrupad Vocal Concerts. Transactions of the International Society for Music Information Retrieval, 3(1), pp.137–152. DOI: http://doi.org/10.5334/tismir.64
-[2] T.P. Vinutha, S. Suryanarayana, K. K. Ganguli and P. Rao " Structural segmentation and visualization of Sitar and Sarod concert audio ", Proc. of the 17th International Society for Music Information Retrieval Conference (ISMIR), Aug 2016, New York, USA
+[2] Meinard Müller and Frank Zalkow: FMP Notebooks: Educational Material for Teaching and Learning Fundamentals of Music Processing. Proceedings of the International Conference on Music Information Retrieval (ISMIR), Delft, The Netherlands, 2019.
+[3] T.P. Vinutha, S. Suryanarayana, K. K. Ganguli and P. Rao " Structural segmentation and visualization of Sitar and Sarod concert audio ", Proc. of the 17th International Society for Music Information Retrieval Conference (ISMIR), Aug 2016, New York, USA
 '''
