@@ -11,6 +11,11 @@ import parselmouth
 import math
 import soundfile as sf
 import ffmpeg
+import os
+import cv2
+from collections import defaultdict
+
+import pdb
 sns.set_theme(rc={"xtick.bottom" : True, "ytick.left" : False, "xtick.major.size":4, "xtick.minor.size":2, "ytick.major.size":4, "ytick.minor.size":2, "xtick.labelsize": 10, "ytick.labelsize": 10})
 
 def readCycleAnnotation(cyclePath, numDiv, startTime, duration):
@@ -57,7 +62,7 @@ def readOnsetAnnotation(onsetPath, startTime, duration, onsetKeyword=['Inst']):
         provided.append(onset_df.loc[(onset_df[keyword] >= startTime) & (onset_df[keyword] <= startTime + duration)])
     return provided
 
-def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', numDiv=0, startTime=0, duration=None, ax=None, annotLabel=True, c='purple', alpha=0.8, y=0.7, size=10):
+def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', numDiv=0, startTime=0, duration=None, ax=None, annotLabel=True, c='purple', alpha=0.8, y=0.7, size=10, textColour='white'):
     '''Draws annotations on ax
 
     Parameters
@@ -74,15 +79,16 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onse
         alpha (float): controls opacity of the annotation lines drawn
         y (float): float value from [0, 1] indicating where the label should occur on the y-axis. 0 indicates the lower ylim, 1 indicates the higher ylim.
         size (int): font size for annotated text
+        textColour (str or list): Text colour for annotation. Can be a single string or a list of strings for each onsetTimeKeyword
 
     Returns
         ax (plt.Axes.axis): axis that has been plotted in
     '''
-
     if cyclePath is not None:
         provided, computed = readCycleAnnotation(cyclePath, numDiv, startTime, duration)
         timeCol = ['Time']    # name of column with time readings
         labelCol = ['Cycle']  # name of column to extract label of annotation from
+        textColours = [textColour]  # colour of text
         c = c if isinstance(c, list) else [c]
     elif onsetPath is not None:
         if annotLabel and type(onsetTimeKeyword) == type(onsetLabelKeyword) and isinstance(onsetTimeKeyword, list):
@@ -95,6 +101,7 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onse
                 raise Exception('Length of onsetTimeKeyword and c should match')   
         timeCol = onsetTimeKeyword if isinstance(onsetTimeKeyword, list) else [onsetTimeKeyword]    # name of column with time readings
         labelCol = onsetLabelKeyword if isinstance(onsetLabelKeyword, list) else [onsetLabelKeyword]  # name of column to extract label of annotation from
+        textColours = textColour if isinstance(textColour, list) else [textColour]
         c = c if isinstance(c, list) else [c]
         provided = readOnsetAnnotation(onsetPath, startTime, duration, onsetKeyword=timeCol)
         computed = None
@@ -112,9 +119,9 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onse
                 if annotLabel:
                     ylims = ax.get_ylim()   # used to set label at 0.7 height of the plot
                     if isinstance(providedVal[labelCol[i]], str):
-                        ax.annotate(f"{providedVal[labelCol[i]]}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*y + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c='white')
+                        ax.annotate(f"{providedVal[labelCol[i]]}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*y + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c=textColours[i])
                     else:
-                        ax.annotate(f"{float(providedVal[labelCol[i]]):g}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*y + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c='white')
+                        ax.annotate(f"{float(providedVal[labelCol[i]]):g}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*y + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c=textColours[i])
     if onsetPath is not None and cyclePath is None:     # add legend only is onsets are given, i.e. legend is added
         ax.legend()
     return ax
@@ -303,8 +310,7 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
     title=title,
     xlim=(0, duration), 
     xticks=(np.arange(0, duration, freqXlabels)) if xticks else [], 
-    xticklabels=(np.arange(startTime, duration+startTime, freqXlabels)) if xticks else [],xticks=np.around(np.arange(math.ceil(startTime)-startTime, duration, freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
-    xticklabels=np.around(np.arange(startTime, duration+startTime, freqXlabels) ).astype(int) if xticks else [], 
+    xticklabels=(np.arange(startTime, duration+startTime, freqXlabels)) if xticks else [],
     ylim=(0, 5000),
     yticks=[0, 2e3, 4e3] if yticks else [], 
     yticklabels=['0', '2k', '4k'] if yticks else [])
@@ -413,7 +419,7 @@ def plotODF(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax
         # if ax is None, return (odf_vals, time_vals)
         return (odf_vals, time_vals)
     else:
-        ax.plot(time_vals, odf_vals[:-1], c=cOdf)     # plot odf_vals and consider odf_vals for all values except the last frame
+        ax.plot(time_vals, odf_vals, c=cOdf)     # plot odf_vals and consider odf_vals for all values except the last frame
         max_abs_val = max(abs(min(odf_vals)), abs(max(odf_vals)))   # find maximum value to set y limits to ensure symmetrical plot
         # set ax parameters only if they are not None
         ax.set(xlabel='' if not xlabel else 'Time (s)', 
@@ -625,6 +631,7 @@ def biphasicDerivative(x, tHop, norm=1, rectify=1):
     Returns
         x: after performing the biphasic derivative of input x (i.e, convolving with a biphasic derivative filter)
 
+    [1] Rao, P., Vinutha, T.P. and Rohit, M.A., 2020. Structural Segmentation of Alap in Dhrupad Vocal Concerts. Transactions of the International Society for Music Information Retrieval, 3(1), pp.137–152. DOI: http://doi.org/10.5334/tismir.64
     '''
 
     n = np.arange(-0.1, 0.1, tHop)
@@ -672,7 +679,11 @@ def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=160
     if x is not None:
         x = fadeIn(x,int(0.5*fs))
         x = fadeOut(x,int(0.5*fs))
-        x = x[int(np.ceil(startTime*fs)):int(np.ceil(endTime*fs))]
+        if endTime is not None:
+            x = x[int(np.ceil(startTime*fs)):int(np.ceil(endTime*fs))]
+        else:
+            # if end time is None, consider the whole audio
+            x = x[int(np.ceil(startTime*fs)):]
     elif audioPath is not None:
         x, _ = librosa.load(audioPath, sr=fs, offset=startTime, duration=endTime-startTime)
     else:
@@ -685,7 +696,7 @@ def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=160
         sub_band = [600,2500]
         odf = subBandEner(X, fs, sub_band)
         odf = to_dB(odf, 100)
-        energy = odf.copy()
+        # energy = odf.copy()
         odf = biphasicDerivative(odf, hopSize/fs, norm=1, rectify=1)
 
         onsets = librosa.onset.onset_detect(onset_envelope=odf.copy(), sr=fs, hop_length=hopSize, pre_max=4, post_max=4, pre_avg=6, post_avg=6, wait=50, delta=0.12)*hopSize/fs
@@ -693,12 +704,12 @@ def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=160
     else:
         sub_band = [0,fs/2]
         odf = spectralFlux(X, fs, sub_band, aMin=1e-4, normalize=True)
-        energy = odf.copy()
+        # energy = odf.copy()
         odf = biphasicDerivative(odf, hopSize, norm=1, rectify=1)
 
         onsets = librosa.onset.onset_detect(onset_envelope=odf, sr=fs, hop_length=hopSize, pre_max=1, post_max=1, pre_avg=1, post_avg=1, wait=10, delta=0.05)*hopSize/fs
 
-    return odf, onsets, energy
+    return odf, onsets #, energy
 
 def spectralFlux(X, fs, band, aMin=1e-4, normalize=True):
     '''Computes 1st order rectified spectral flux (difference) of a given STFT input
@@ -726,6 +737,70 @@ def spectralFlux(X, fs, band, aMin=1e-4, normalize=True):
         specFlux/=max(specFlux)
     return specFlux
     
+def compute_local_average(x, M, Fs=1):
+    """Compute local average of signal
+
+    Notebook: C6/C6S1_NoveltySpectral.ipynb
+
+    Args:
+        x: Signal
+        M: Determines size (2M+1*Fs) of local average
+        Fs: Sampling rate
+
+    Returns:
+        local_average: Local average signal
+    """
+    L = len(x)
+    M = int(np.ceil(M * Fs))
+    local_average = np.zeros(L)
+    for m in range(L):
+        a = max(m - M, 0)
+        b = min(m + M + 1, L)
+        local_average[m] = (1 / (2 * M + 1)) * np.sum(x[a:b])
+    return local_average
+
+def spectral_flux_fmp(x, Fs=1, N=1024, W=640, H=80, gamma=100, M=20, norm=1, band=[]):
+    """Compute spectral-based novelty function
+
+    Notebook: C6/C6S1_NoveltySpectral.ipynb
+
+    Args:
+        x: Signal
+        Fs: Sampling rate
+        N: Window size
+        H: Hope size
+        gamma: Parameter for logarithmic compression
+        M: Size (frames) of local average
+        norm: Apply max norm (if norm==1)
+        band: List of lower and upper spectral freq limits
+
+    Returns:
+        novelty_spectrum: Energy-based novelty function
+        Fs_feature: Feature rate
+    """
+    X = librosa.stft(x, n_fft=N, hop_length=H, win_length=W, window='hanning')
+    Fs_feature = Fs / H
+    Y = np.log(1 + gamma * np.abs(X))
+	
+	#if vocal-band SF
+    if len(band)!=0: 
+        band = np.array(band)*(N/2+1)/Fs
+        Y = Y[int(band[0]):int(band[1]),:]
+
+    Y_diff = np.diff(Y)
+    Y_diff[Y_diff < 0] = 0
+    novelty_spectrum = np.sum(Y_diff, axis=0)
+    novelty_spectrum = np.concatenate((novelty_spectrum, np.array([0.0])))
+    if M > 0:
+        local_average = compute_local_average(novelty_spectrum, M)
+        novelty_spectrum = novelty_spectrum - local_average
+        novelty_spectrum[novelty_spectrum < 0] = 0.0
+    if norm == 1:
+        max_value = max(novelty_spectrum)
+        if max_value > 0:
+            novelty_spectrum = novelty_spectrum / max_value
+    return novelty_spectrum
+
 def fadeIn(x,length):
 	fade_func = np.ones(len(x))
 	fade_func[:length] = np.hanning(2*length)[:length]
@@ -764,9 +839,72 @@ def subsequences(signal, frame_length, hop_length):
     strides = (hop_length*signal.strides[0], signal.strides[0])
     return np.lib.stride_tricks.as_strided(signal, shape=shape, strides=strides)
 
+def tempo_period_comb_filter(ACF, fs, norm=1):
+    L = np.shape(ACF)[1]
+    min_lag = 10
+#    max_lag = L/2    #For madhya laya
+    max_lag = L     # For Vil bandish
+#    max_lag = 66    # For Drut gats
+    N_peaks = 11    # 11 for Madhya laya & 9 for Drut gat  
+    
+ 
+    window = zeros((L, L))
+    for j in range(min_lag, max_lag):
+        C = j*np.arange(1, N_peaks)
+        D = np.concatenate((C, C+1, C-1, C+2, C-2, C+3, C-3))
+        D = D[D<L]
+        norm_factor = len(D)
+        if norm == 1:
+            window[j][D] = 1.0/norm_factor
+        else:
+            window[j][D] = 1.0
+            
+    tempo_candidates = np.dot(ACF, transpose(window))
+    
+#    re_weight = zeros(L)
+#    re_weight[min_lag:max_lag] = linspace(1, 0.5, max_lag-min_lag)
+#    tempo_candidates = tempo_candidates*re_weight
+    tempo_lag = np.argmax(tempo_candidates, axis=1)/float(fs)
+    return (window, tempo_candidates, tempo_lag)
+
+def viterbi_tempo_rhythm(tempo_candidates, fs, transition_penalty):
+    T = np.shape(tempo_candidates)[0]
+    L = np.shape(tempo_candidates)[1]
+
+    p1=transition_penalty
+
+    cost=ones((T,L//2))*1e8
+    m=zeros((T,L//2))
+
+#    cost[:,0]=1000
+#    m[0][1]=argmax(tempo_candidates[0])
+#    for j in range(1,L):
+#        cost[1][j]=abs(60*fs/j-60*fs/m[0][1])/tempo_candidates[1][j]
+#        m[1][j]=m[0][1]/fs
+
+    for i in range(1,T):
+        for j in range(1,L//2):
+            cost[i][j]=cost[i-1][1]+p1*abs(60.0*fs/j-60.0*fs)-tempo_candidates[i][j]
+            for k in range(2,L//2):
+                if cost[i][j]>cost[i-1][k]+p1*abs(60.0*fs/j-60.0*fs/k)-tempo_candidates[i][j]:
+                    cost[i][j]=cost[i-1][k]+p1*abs(60.0*fs/j-60.0*fs/k)-tempo_candidates[i][j]
+                    m[i][j]=int(k)
+                    
+    tempo_period=zeros(T)
+    tempo_period[T-1]=argmin(cost[T-1,1:])/float(fs)
+    t=int(m[T-1,argmin(cost[T-1,1:])])
+    i=T-2
+    while(i>=0):
+        tempo_period[i]=t/float(fs)
+        t=int(m[i][t])
+        i=i-1
+    return tempo_period
+
 def plot_matrix(X, Fs=1, Fs_F=1, T_coef=None, F_coef=None, xlabel='Time (seconds)', ylabel='Frequency (Hz)', title='',
                 dpi=72, colorbar=True, colorbar_aspect=20.0, ax=None, figsize=(6, 3), **kwargs):
-    """Plot a matrix, e.g. a spectrogram or a tempogram (function from Notebook: B/B_PythonVisualization.ipynb in [2])
+    """Plot a matrix, e.g. a spectrogram or a tempogram
+    
+    Notebook: B/B_PythonVisualization.ipynb in [2])
  
     Args:
         X: The matrix
@@ -830,6 +968,307 @@ def plot_matrix(X, Fs=1, Fs_F=1, T_coef=None, F_coef=None, xlabel='Time (seconds
         plt.tight_layout()
 
     return fig, ax, im
+
+def drawSyllablesBols(filePath, ax, y=None, timeOffset=50e-3, size=10, textColor='blue'):
+    data_df = pd.read_csv(filePath)
+    if y is None: y = 0
+    for i in range(data_df.shape[0]):
+        try:
+            text = data_df.iloc[i]['Syllable']
+        except KeyError:
+            text = data_df.iloc[i]['Bol']
+        x = data_df.iloc[i]['Time'] + timeOffset
+        ax.annotate(text, (x, y), bbox=dict(facecolor='white', edgecolor='grey', linewidth=0.5), c=textColor, fontsize=size)
+    return ax
+
+def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, timeStep=0.01, ax=None, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', xticks=False, yticks=False, xlabel=True, ylabel=True, title='Intensity Contour', cAnnot='red', annotLabel=True, annotAlpha=0.8):
+    '''Calculates the intensity contour for an audio clip. Used in fig 10.
+
+    Parameters
+        audio (np.array): loaded audio time series
+        sr (int): sample rate of audio time series/ to load the audio at
+        audioPath (str): path to audio file; only needed if audio is None
+        startTime (float): time to start reading audio file
+        duration (float): duration of the audio file to read
+        minPitch (float): minimum pitch to read for contour extraction
+        timeStep (float): time steps in which audio is extracted
+        ax (plt.Axes.axis): axis to plot the pitch contour in
+        freqXlabels (int): time (in seconds) after which each x label occurs
+        annotate (bool): if True, will annotate tala markings
+        cyclePath (str): path to file with tala cycle annotations
+        numDiv (int): number of divisions to put between each annotation marking
+        onsetPath (str): path to file with onset annotations; only considered if cyclePath is None
+        onsetTimeKeyword (str): column name in the onset file to take onsets from
+        onsetLabelKeyword (str): column name with labels for the onsets; if None, no label will be printed
+        xticks (bool): if True, will plot xticklabels
+        yticks (bool): if True, will plot yticklabels
+        xlabel (bool): if True, will add an x label
+        ylabel (bool): if True, will add a y label
+        title (str): title of the plot
+        annotLabel (bool): if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
+        cAnnot (str): color of the annotation
+        annotAlpha: controls opacity of the annotation lines
+
+    Returns:
+        ax: plot of pitch contour if ax was not None
+        (intensity_vals, time_vals): returns intensity values and time values if ax is None
+    
+    '''
+    startTime = math.floor(startTime)   # set start time to an integer, for better readability on the x axis of the plot
+    duration = math.ceil(duration)  # set duration to an integer, for better readability on the x axis of the plot
+    if audio is None:
+        # if audio is not given, load audio from audioPath
+        audio, sr = librosa.load(audioPath, sr=sr, mono=True, offset=startTime, duration = duration)
+    snd = parselmouth.Sound(audio, sr)
+    intensity = snd.to_intensity(time_step=timeStep, minimum_pitch=minPitch)
+    intensity_vals = intensity.values[0]
+    time_vals = intensity.xs()
+    
+    if ax is None:
+        # if ax is None, return intensity and time values
+        return (intensity_vals, time_vals)
+    else:
+        # else plot the contour
+        return plotIntensity(intensity_vals=intensity_vals, time_vals=time_vals, ax=ax, startTime=startTime, duration=duration, freqXlabels=freqXlabels, xticks=xticks, yticks=yticks, xlabel=xlabel, ylabel=ylabel, title=title, annotate=annotate, cyclePath=cyclePath, numDiv=numDiv, onsetPath=onsetPath, onsetTimeKeyword=onsetTimeKeyword, onsetLabelKeyword=onsetLabelKeyword, cAnnot=cAnnot, annotLabel=annotLabel, annotAlpha=annotAlpha)
+
+def plotIntensity(intensity_vals=None, time_vals=None, ax=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, xlabel=True, ylabel=True, title='Intensity Contour', annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='red', annotLabel=True, annotAlpha=0.8):
+    '''Function to plot a computed intensity contour from `intensityContour` function. Used in fig 10.
+
+    Parameters
+        intensity_vals (np.array): intensity value from `intensityContour`
+        time_vals (np.array): time steps corresponding to the intensity values from `intensityContour`
+        ax (plt.Axes.axis): axis object on which plot is to be plotted
+        startTime (float): start time for x labels in the plot
+        duration (float): duration of audio in the plot (used for x labels)
+        freqXlabels (int): time (in seconds) after which each x label occurs
+        xticks (bool): if True, will print x tick labels
+        yticks (bool): if True, will print y tick labels
+        xlabel (bool): if True, will print the x label
+        ylabel (bool): if True, will print the y label
+        title (str): The title of the plot
+        annotate (bool): if True will mark annotations provided
+        cyclePath (str): path to file with cycle annotations; used only if annotate is True
+        numDiv (int): number of divisions to add between each marked cycle; used only if annotate is True
+        onsetPath (str): path to file with onset annotations; only considered if cyclePath is None
+        onsetKeyword (str): column name in the onset file to take onsets from
+        onsetLabelKeyword (str): column name with labels for the onsets; if None, no label will be printed
+        cAnnot (str): colour to draw annotation lines in; used only if annotate is True
+        annotLabel (bool): if True, will print annotation label along with line; used only if annotate is True
+        annotAlpha (float): controls opacity of the line drawn
+    Returns
+        ax: plotted axis
+    
+    '''
+    if intensity_vals is None or time_vals is None:
+        Exception('No intensity contour and/or time values provided')
+    if ax is None:
+        Exception('ax parameter has to be provided')
+    
+    ax = sns.lineplot(x=time_vals, y=intensity_vals, ax=ax, color=cAnnot);
+    ax.set(xlabel='Time Stamp (s)' if xlabel else '', 
+    ylabel='Intensity (dB)' if ylabel else '', 
+    title=title, 
+    xlim=(0, duration), 
+    xticks=(np.arange(0, duration, freqXlabels)), 
+    xticklabels=(np.arange(startTime, duration+startTime, freqXlabels) )if xticks else [])
+    if not yticks:
+        ax.set(yticklabels=[])
+    if annotate:
+        ax = drawAnnotation(cyclePath=cyclePath, onsetPath=onsetPath, onsetTimeKeyword=onsetTimeKeyword, onsetLabelKeyword=onsetLabelKeyword, numDiv=numDiv, startTime=startTime, duration=duration, ax=ax, c=cAnnot, annotLabel=annotLabel, alpha=annotAlpha)
+    return ax
+
+def plot_hand(annotationFile=None, startTime=0, duration=None, freqXLabels=5, vidFps=25, ax=None, annotate=False, cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', numDiv=0, cAnnot='yellow', annotLabel=False, annotAlpha=0.8, xticks=False, yticks=False, xlabel=True, ylabel=True, title='Wrist Position Vs. Time', vidOffset=0, lWristCol='LWrist', rWristCol='RWrist', wristAxis='y'):
+    '''Function to show hand movement. Used in fig 10.
+    
+    Parameters
+        annotationFile (str): file path to openpose annotations
+        startTime (float): start time for x labels in the plot
+        duration (float): duration of audio in the plot (used for x labels)
+        freqXlabels (int): time (in seconds) after which each x label occurs
+        vidFps (float): fps of the video
+        ax (plt.Axes.axis): axis object on which plot is to be plotted
+        annotate (bool): if True will mark annotations provided
+        cyclePath (str): path to file with cycle annotations; used only if annotate is True
+        onsetPath (str): path to file with onset annotations; only considered if cyclePath is None
+        onsetKeyword (str): column name in the onset file to take onsets from
+        onsetLabelKeyword (str): column name with labels for the onsets; if None, no label will be printed
+        numDiv (int): number of divisions to add between each marked cycle; used only if annotate is True
+        cAnnot (str): colour to draw annotation lines in; used only if annotate is True
+        annotLabel (bool): if True, will print annotation label along with line; used only if annotate is True
+        annotAlpha (float): controls opacity of the line drawn
+        xticks (bool): if True, will print x tick labels
+        yticks (bool): if True, will print y tick labels
+        xlabel (bool): if True, will add the x label
+        ylabel (bool): if True, will add the y label
+        title (str): title of the plot
+        videoOffset (float): number of seconds offset between video and audio; time in audio + videioOffset = time in video
+        lWristCol (str): name of the column with left wrist data in annotationFile
+        rWristCol (str): name of the column with right wrist data in annotationFile
+        wristAxis (str): Level 2 header denoting axis along which movement is plotted
+        
+    Returns
+        ax: plotted axis
+
+    '''
+    startTime = math.floor(startTime) + np.around(vidOffset)   # set start time to an integer, for better readability on the x axis of the plot
+    duration = math.ceil(duration)  # set duration to an integer, for better readability on the x axis of the plot
+    movements = pd.read_csv(annotationFile, header=[0, 1])
+    lWrist = movements[lWristCol][wristAxis].values[startTime*vidFps:(startTime+duration)*vidFps]
+    rWrist = movements[rWristCol][wristAxis].values[startTime*vidFps:(startTime+duration)*vidFps]
+    xvals = np.linspace(0, duration, vidFps*duration, endpoint=False)
+    ax.plot(xvals, lWrist, label='Left Wrist')
+    ax.plot(xvals, rWrist, label='Right Wrist')
+    ax.set(xlabel='Time Stamp (s)' if xlabel else '', 
+    ylabel='Wrist Position' if ylabel else '', 
+    title=title, 
+    xlim=(0, duration), 
+    xticks=(np.arange(0, duration, freqXLabels)), 
+    xticklabels=(np.arange(startTime, duration+startTime, freqXLabels) )if xticks else [],
+    )
+    if not yticks:
+        ax.set(yticklabels=[])
+    ax.invert_yaxis()
+    ax.legend()
+    if annotate:
+        ax = drawAnnotation(cyclePath, onsetPath, onsetTimeKeyword, onsetLabelKeyword, numDiv, startTime-np.around(vidOffset), duration, ax, c=cAnnot, annotLabel=annotLabel, alpha=annotAlpha)
+    return ax
+
+def annotateInteraction(axs, keywords, cs, interactionFile, startTime, duration):
+    '''Adds interaction annotation to the axes given. Used in fig 3.
+
+    Parameters
+        axs: list of axs to add annotation to
+        keywords: keyword corresponding to each axis. If len(keywords) = len(axs) + 1, the last keyword is plotted in all axes
+        cs: list of colours associated with each keyword
+        interactionFile: path to csv file with the annotation of the interactions
+        startTime: time to start reading the audio
+        duration: length of audio to consider
+
+    Returns
+        axs: list of axes with annotation
+    '''
+
+    annotations = pd.read_csv(interactionFile, header=None)
+    annotations.columns = ['Type', 'Start Time', 'End Time', 'Duration', 'Label']
+    annotations = annotations.loc[((annotations['Start Time'] >= startTime) & (annotations['Start Time'] <= startTime+duration)) &
+                                ((annotations['End Time'] >= startTime) & (annotations['End Time'] <= startTime+duration))
+                                ]
+    for i, keyword in enumerate(keywords):
+        if i < len(axs):
+            # keyword corresponds to a particular axis
+            for _, annotation in annotations.loc[annotations['Type'] == keyword].iterrows():
+                rand = np.random.random()# random vertical displacement for the label
+                lims = axs[i].get_ylim()
+                axs[i].annotate('', xy=(annotation['Start Time'] - startTime, rand*(lims[1] - lims[0] - 100) + lims[0] + 50), xytext=(annotation['End Time'] - startTime, rand*(lims[1] - lims[0] - 100) + lims[0] + 50), arrowprops={'headlength': 0.4, 'headwidth': 0.2, 'width': 3, 'ec': cs[i], 'fc': cs[i]})
+                axs[i].annotate(annotation['Label'], (annotation['Start Time']-startTime+annotation['Duration']/2, rand*(lims[1] - lims[0] - 100) + lims[0] + 150), ha='center')
+        else:
+            # keyword corresponds to all axes
+            for ax in axs:
+               for _, annotation in annotations.loc[annotations['Type'] == keyword].iterrows():
+                rand = np.random.random()# random vertical displacement for the label
+                ax.annotate('', xy=(annotation['Start Time'] - startTime, rand*(lims[1] - lims[0] - 100) + lims[0] + 50), xytext=(annotation['End Time'] - startTime, rand*(lims[1] - lims[0] - 100) + lims[0] + 50), arrowprops={'headlength': 0.4, 'headwidth': 0.2, 'width': 3, 'ec':cs[i], 'fc': cs[i]})
+                ax.annotate(annotation['Label'], (annotation['Start Time']-startTime+annotation['Duration']/2, rand*(lims[1] - lims[0] - 100) + lims[0] + 150), ha='center') 
+    return axs
+
+def drawHandTap(ax, handTaps, c='purple'):
+    '''Plots the hand taps as vertical lines on the axis ax. Used in fig 9.
+    
+    Parameters
+        ax (plt.Axes.axis): axis to add hand taps to
+        handTaps (np.array): array of hand tap timestamps
+        c (str): color for plot
+    '''
+    for handTap in handTaps:
+        ax.axvline(handTap, linestyle='--', c=c, alpha=0.6)
+    return ax
+
+def generateVideoWSquares(vid_path, timeStamps, dest_path='Data/Temp/vidWSquares.mp4', vid_size=(720, 576)):
+    '''Function to genrate a video with rectangles for each tap. Used in fig 9.
+    
+    Parameters
+        vid_path (str): path to the original video
+        timeStamps (list): list of time stamps with the following values for each time stamp - [time, keyword, [pos1, pos2], color]
+        dest_path (str): file path to save video with clicks
+        vid_size ((int, int)): video size to generate
+
+    Returns
+        None
+    '''
+
+    cap_vid = cv2.VideoCapture(vid_path)
+    fps = cap_vid.get(cv2.CAP_PROP_FPS)
+    framesToDraw = defaultdict(list)   # dictionary with frame numbers as keys and properties of square box to draw as list of values
+    for timeRow in timeStamps:
+        framesToDraw[int(np.around(timeRow[0]*fps))] = timeRow[1:]
+    output = cv2.VideoWriter(dest_path, cv2.VideoWriter_fourcc(*"XVID"), fps, vid_size)
+    i = 0
+    # generate video
+    while(cap_vid.isOpened()):
+        ret, frame = cap_vid.read()
+        if ret == True:
+            i+=1
+            if i in framesToDraw.keys():
+                frame = cv2.rectangle(frame, framesToDraw[i][1][0], framesToDraw[i][1][1], tuple([int(x) for x in framesToDraw[i][2]][::-1]), 3)    # converting color from BGR to RGB
+            output.write(frame)
+        else:
+            # all frames are read
+            break
+    cap_vid.release()
+    output.release()
+
+def combineAudioVideo(vid_path='Data/Temp/vidWSquares.mp4', audio_path='audioWClicks.wav', dest_path='Data/Temp/FinalVid.mp4'):
+    '''Function to combine audio and video into a single file. Used in fig 9.
+
+    Parameters
+        vid_path (str): file path to the video file with squares
+        audio_path (str): file path to the audio file with clicks
+        dest_path (str): file path to store the combined file at
+
+    Returns
+        None
+
+    '''
+    
+    vid_file = ffmpeg.input(vid_path)
+    audio_file = ffmpeg.input(audio_path)
+    (
+        ffmpeg
+        .concat(vid_file.video, audio_file.audio, v=1, a=1)
+        .output(dest_path)
+        .overwrite_output()
+        .run()
+    )
+    print('Video saved at ' + dest_path)
+
+def generateVideo(annotationFile, onsetKeywords, vidPath='Data/Temp/VS_Shree_1235_1321.mp4', tempFolder='Data/Temp/', pos=None, cs=None):
+    '''Function to generate video with squares and clicks corresponding to hand taps. Used in fig 9.
+    
+    Parameters
+        annotationFile (str): file path to the annotation file with hand tap timestamps
+        onsetKeywords (list): list of column names to read from annotationFile
+        vidPath (str): file path to original file
+        tempFolder (str): file path to temporary directory to store files in
+        pos (list): list of [pos1, pos2] -> 2 opposite corners of the box for each keyword 
+        cs (list): list of [R, G, B] colours used for each keyword
+    
+    Returns
+        None
+    '''
+    annotations = pd.read_csv(annotationFile)
+    timeStamps = []
+    for i, keyword in enumerate(onsetKeywords):
+        for timeVal in annotations[keyword].values[~np.isnan(annotations[keyword].values)]:
+            timeStamps.append([timeVal, keyword, pos[i], cs[i]])
+    timeStamps.sort(key=lambda x: x[0])
+
+    # generate video 
+    generateVideoWSquares(vid_path=vidPath, timeStamps=timeStamps, dest_path=os.path.join(tempFolder, 'vidWSquares.mp4'))
+
+    # generate audio
+    playAudioWClicks(audioPath=vidPath, onsetFile=annotationFile, onsetLabels=onsetKeywords, destPath=os.path.join(tempFolder, 'audioWClicks.wav'))
+
+    # combine audio and video
+    combineAudioVideo(vid_path=os.path.join(tempFolder, 'vidWSquares.mp4'), audio_path=os.path.join(tempFolder, 'audioWClicks.wav'), dest_path=os.path.join(tempFolder, 'finalVid.mp4'))
 
 '''
 References
