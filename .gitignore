@@ -12,3 +12,4 @@ onsetExample/pretrained_models/
 onsetExample/*.png
 utils-rohit.py
 recipes/
+docs/

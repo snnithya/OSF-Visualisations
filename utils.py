@@ -21,11 +21,13 @@ sns.set_theme(rc={"xtick.bottom" : True, "ytick.left" : False, "xtick.major.size
 def readCycleAnnotation(cyclePath, numDiv, startTime, duration):
     '''Function to read cycle annotation and add divisions in the middle if required.
 
-    Parameters:
-        cyclePath (str): path to the cycle annotation file
-        numDiv (int): number of equally spaced divisions to add between pairs of annotations (numDiv - 1 timestamps will be added between each pair)
-        startTime (float): start time of audio being analysed
-        duration (float): duration of the audio to be analysed
+
+    Parameters
+    ----------
+    	:param cyclePath (str): path to the cycle annotation file
+		:param numDiv (int): number of equally spaced divisions to add between pairs of annotations (numDiv - 1 timestamps will be added between each pair)
+		:param startTime (float): start time of audio being analysed
+		:param duration (float): duration of the audio to be analysed
 
     Returns:
         provided (np.ndarray): a numpy array of annotations from the file
@@ -65,7 +67,7 @@ def readOnsetAnnotation(onsetPath, startTime, duration, onsetKeyword=['Inst']):
 def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', numDiv=0, startTime=0, duration=None, ax=None, annotLabel=True, c='purple', alpha=0.8, y=0.7, size=10, textColour='white'):
     '''Draws annotations on ax
 
-    Parameters
+    Parameters:
         cyclePath (str): path to the cycle annotation file
         onsetPath (str): path to onset annotations; only considered if cyclePath is None
         onsetKeyword (str): column name in the onset file to take onsets from
@@ -131,7 +133,7 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
 
     Uses `plotPitch` to plot pitch contour if ax is not None.
 
-    Parameters
+    Parameters:
         audio (np.ndarray): loaded audio time series
         sr (int): sample rate of audio time series/ to load the audio at
         audioPath (str): path to audio file; only needed if audio is None
@@ -194,7 +196,7 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
 def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, tonic=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, xlabel=True, ylabel=True, title='Pitch Contour (Cents)', annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True, ylim=None, annotAlpha=0.8, yAnnot=0.7, sizeAnnot=10):
     '''Plots the pitch contour
 
-    Parameters
+    Parameters:
         pitchvals (np.ndarray): pitch values in cents
         timevals (np.ndarray): time values in seconds
         notes (dict): object for each note used for labelling y-axis
@@ -257,7 +259,7 @@ def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, tonic=None, st
 def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, winSize=0.04, hopSize=0.01, n_fft=None, cmap='Blues', ax=None, amin=1e-5, freqXlabels=5, xticks=False, yticks=False, xlabel=True, ylabel=True, title='Spectrogram', annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True):
     '''Plots spectrogram
 
-    Parameters
+    Parameters:
         audio (np.ndarray): loaded audio time series
         sr (int): sample rate that audio time series is loaded/ is to be loaded in
         audioPath (str): path to the audio file; only needed if audio is None
@@ -322,30 +324,32 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, yticks=True, xlabel=True, ylabel=True, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, cAnnot='purple', annotLabel=True, odf=False, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black', title='Waveform'):
     '''Plots the wave plot of the audio
 
-    audio (np.ndarray): loaded audio time series
-    sr (int): sample rate that audio time series is loaded/ is to be loaded in
-    audioPath (str): path to the audio file
-    startTime (float): time to start reading the audio at
-    duration (float): duration of audio to load
-    ax (plt.Axes.axes): axis to plot waveplot in
-    xticks (bool): if True, will plot xticklabels
-    yticks (bool): if True, will plot yticklabels
-    xlabel (bool): if True, will add a x label
-    ylabel (bool): if True will add a y label
-    freqXlabels (float): time (in seconds) after which each x label occurs
-    annotate (bool): if True, will annotate tala markings
-    cyclePath (str): path to file with tala cycle annotations
-    numDiv (int): number of divisions to put between each annotation marking
-    onsetPath (str): path to file with onset annotations; only considered if cyclePath is None
-    cAnnot: colour for the annotation marking; input to the ax.annotate function for the colour (c) parameter; used only if annotate is True
-    annotLabel (bool): if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
-    odf (bool): if True, will plot the onset detection function over the wave form
-    winSize_odf (float): window size in seconds, fed to the onset detection function; valid only if odf is true
-    hopSize_odf (float): hop size in seconds, fed to the onset detection function; valid only if odf is true
-    nFFT_odf (int): size of DFT used in onset detection function; valid only if odf is true
-    source_odf (str): type of instrument - vocal or pakhawaj, fed to odf; valid only if odf is true
-    cOdf: colour to plot onset detection function in; valid only if odf is true
-    title (str): title of the plot
+    Parameters:
+
+        audio (np.ndarray): loaded audio time series
+        sr (int): sample rate that audio time series is loaded/ is to be loaded in
+        audioPath (str): path to the audio file
+        startTime (float): time to start reading the audio at
+        duration (float): duration of audio to load
+        ax (plt.Axes.axes): axis to plot waveplot in
+        xticks (bool): if True, will plot xticklabels
+        yticks (bool): if True, will plot yticklabels
+        xlabel (bool): if True, will add a x label
+        ylabel (bool): if True will add a y label
+        freqXlabels (float): time (in seconds) after which each x label occurs
+        annotate (bool): if True, will annotate tala markings
+        cyclePath (str): path to file with tala cycle annotations
+        numDiv (int): number of divisions to put between each annotation marking
+        onsetPath (str): path to file with onset annotations; only considered if cyclePath is None
+        cAnnot: colour for the annotation marking; input to the ax.annotate function for the colour (c) parameter; used only if annotate is True
+        annotLabel (bool): if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
+        odf (bool): if True, will plot the onset detection function over the wave form
+        winSize_odf (float): window size in seconds, fed to the onset detection function; valid only if odf is true
+        hopSize_odf (float): hop size in seconds, fed to the onset detection function; valid only if odf is true
+        nFFT_odf (int): size of DFT used in onset detection function; valid only if odf is true
+        source_odf (str): type of instrument - vocal or pakhawaj, fed to odf; valid only if odf is true
+        cOdf: colour to plot onset detection function in; valid only if odf is true
+        title (str): title of the plot
     '''
     if ax is None:
         Exception('ax parameter has to be provided')
@@ -437,7 +441,7 @@ def plotEnergy(audio=None, sr=16000, audioPath=None, startTime=0, duration=None,
     '''
     For debugging puposes only - plots energy function used to calculate odf
 
-    Parameters
+    Parameters:
         audio: loaded audio time series
         sr: sample rate that audio time series is loaded/ is to be loaded in
         audioPath: path to the audio file
@@ -485,7 +489,7 @@ def plotEnergy(audio=None, sr=16000, audioPath=None, startTime=0, duration=None,
 def playAudio(audio=None, sr=16000, audioPath=None, startTime=0, duration=None):
     '''Plays relevant part of audio
 
-    Parameters
+    Parameters:
         audio: loaded audio sample
         sr: sample rate of audio; valid only if audio is not None
         audioPath: path to audio file
@@ -502,7 +506,7 @@ def playAudio(audio=None, sr=16000, audioPath=None, startTime=0, duration=None):
 def playAudioWClicks(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, onsetFile=None, onsetLabels=['Inst', 'Tabla'], destPath=None):
     '''Plays relevant part of audio along with clicks at timestamps in onsetTimes
 
-    Parameters
+    Parameters:
         audio (np.ndarray): loaded audio sample
         sr (float): sample rate of audio
         audioPath (str): path to audio file
@@ -535,7 +539,7 @@ def playAudioWClicks(audio=None, sr=16000, audioPath=None, startTime=0, duration
 def playVideo(video=None, videoPath=None, startTime=0, duration=None, destPath='Data/Temp/VideoPart.mp4', videoOffset=0):
     '''Plays relevant part of audio
 
-    Parameters
+    Parameters:
         video (np.ndarray): loaded video sample
         videoPath (str): path to video file
         startTime (float): time to start reading the video from
@@ -571,7 +575,7 @@ def generateFig(noRows, figSize=(14, 7), heightRatios=None):
 
     Axes in the plot are stacked vertically in one column, with height of each axis determined by heightRatios
 
-    Parameters
+    Parameters:
         noRows: number of rows in the figure
         figSize: (width, height) in inches  of the figure
         heightRatios: list of the fraction of height that each axis should take; len(heightRatios) has to be equal to noRows
@@ -593,7 +597,7 @@ def generateFig(noRows, figSize=(14, 7), heightRatios=None):
 def to_dB(x, C):
     '''Applies logarithmic (base 10) transformation
     
-    Parameters
+    Parameters:
         x: input signal
         C: scaling constant
     
@@ -605,7 +609,7 @@ def to_dB(x, C):
 def subBandEner(X,fs,band):
     '''Computes spectral sub-band energy (suitable for vocal onset detection)
 
-    Parameters
+    Parameters:
         X: STFT of an audio signal x
         fs: sampling rate
         band: edge frequencies (in Hz) of the sub-band of interest
@@ -622,7 +626,7 @@ def subBandEner(X,fs,band):
 def biphasicDerivative(x, tHop, norm=1, rectify=1):
     '''Computes a biphasic derivative (See [1] for a detailed explanation of the algorithm)
     
-    Parameters
+    Parameters:
         x: input signal
         tHop: frame- or hop-length used to obtain input signal values (reciprocal of sampling rate of x)
         norm: if output is to be normalized
@@ -656,7 +660,7 @@ def biphasicDerivative(x, tHop, norm=1, rectify=1):
 def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=16000, winSize=0.4, hopSize=0.01, nFFT=1024, source='vocal'):
     '''Computes onset activation function
 
-    Parameters
+    Parameters:
         x: audio signal array
         audioPath: path to the audio file
         startTime: time to start reading the audio at
@@ -714,7 +718,7 @@ def getOnsetActivation(x=None, audioPath=None, startTime=0, endTime=None, fs=160
 def spectralFlux(X, fs, band, aMin=1e-4, normalize=True):
     '''Computes 1st order rectified spectral flux (difference) of a given STFT input
     
-    Parameters
+    Parameters:
         X: input STFT matrix
         fs: sampling rate of audio signal
         band: frequency band over which to compute flux from STFT (sub-band spectral flux)
@@ -984,7 +988,7 @@ def drawSyllablesBols(filePath, ax, y=None, timeOffset=50e-3, size=10, textColor
 def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, timeStep=0.01, ax=None, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', xticks=False, yticks=False, xlabel=True, ylabel=True, title='Intensity Contour', cAnnot='red', annotLabel=True, annotAlpha=0.8):
     '''Calculates the intensity contour for an audio clip. Used in fig 10.
 
-    Parameters
+    Parameters:
         audio (np.array): loaded audio time series
         sr (int): sample rate of audio time series/ to load the audio at
         audioPath (str): path to audio file; only needed if audio is None
@@ -1034,7 +1038,7 @@ def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration
 def plotIntensity(intensity_vals=None, time_vals=None, ax=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, xlabel=True, ylabel=True, title='Intensity Contour', annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='red', annotLabel=True, annotAlpha=0.8):
     '''Function to plot a computed intensity contour from `intensityContour` function. Used in fig 10.
 
-    Parameters
+    Parameters:
         intensity_vals (np.array): intensity value from `intensityContour`
         time_vals (np.array): time steps corresponding to the intensity values from `intensityContour`
         ax (plt.Axes.axis): axis object on which plot is to be plotted
@@ -1080,7 +1084,7 @@ def plotIntensity(intensity_vals=None, time_vals=None, ax=None, startTime=0, dur
 def plot_hand(annotationFile=None, startTime=0, duration=None, freqXLabels=5, vidFps=25, ax=None, annotate=False, cyclePath=None, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', numDiv=0, cAnnot='yellow', annotLabel=False, annotAlpha=0.8, xticks=False, yticks=False, xlabel=True, ylabel=True, title='Wrist Position Vs. Time', vidOffset=0, lWristCol='LWrist', rWristCol='RWrist', wristAxis='y'):
     '''Function to show hand movement. Used in fig 10.
     
-    Parameters
+    Parameters:
         annotationFile (str): file path to openpose annotations
         startTime (float): start time for x labels in the plot
         duration (float): duration of audio in the plot (used for x labels)
@@ -1136,7 +1140,7 @@ def plot_hand(annotationFile=None, startTime=0, duration=None, freqXLabels=5, vi
 def annotateInteraction(axs, keywords, cs, interactionFile, startTime, duration):
     '''Adds interaction annotation to the axes given. Used in fig 3.
 
-    Parameters
+    Parameters:
         axs: list of axs to add annotation to
         keywords: keyword corresponding to each axis. If len(keywords) = len(axs) + 1, the last keyword is plotted in all axes
         cs: list of colours associated with each keyword
@@ -1173,7 +1177,7 @@ def annotateInteraction(axs, keywords, cs, interactionFile, startTime, duration)
 def drawHandTap(ax, handTaps, c='purple'):
     '''Plots the hand taps as vertical lines on the axis ax. Used in fig 9.
     
-    Parameters
+    Parameters:
         ax (plt.Axes.axis): axis to add hand taps to
         handTaps (np.array): array of hand tap timestamps
         c (str): color for plot
@@ -1185,7 +1189,7 @@ def drawHandTap(ax, handTaps, c='purple'):
 def generateVideoWSquares(vid_path, timeStamps, dest_path='Data/Temp/vidWSquares.mp4', vid_size=(720, 576)):
     '''Function to genrate a video with rectangles for each tap. Used in fig 9.
     
-    Parameters
+    Parameters:
         vid_path (str): path to the original video
         timeStamps (list): list of time stamps with the following values for each time stamp - [time, keyword, [pos1, pos2], color]
         dest_path (str): file path to save video with clicks
@@ -1219,7 +1223,7 @@ def generateVideoWSquares(vid_path, timeStamps, dest_path='Data/Temp/vidWSquares
 def combineAudioVideo(vid_path='Data/Temp/vidWSquares.mp4', audio_path='audioWClicks.wav', dest_path='Data/Temp/FinalVid.mp4'):
     '''Function to combine audio and video into a single file. Used in fig 9.
 
-    Parameters
+    Parameters:
         vid_path (str): file path to the video file with squares
         audio_path (str): file path to the audio file with clicks
         dest_path (str): file path to store the combined file at
@@ -1243,7 +1247,7 @@ def combineAudioVideo(vid_path='Data/Temp/vidWSquares.mp4', audio_path='audioWCl
 def generateVideo(annotationFile, onsetKeywords, vidPath='Data/Temp/VS_Shree_1235_1321.mp4', tempFolder='Data/Temp/', pos=None, cs=None):
     '''Function to generate video with squares and clicks corresponding to hand taps. Used in fig 9.
     
-    Parameters
+    Parameters:
         annotationFile (str): file path to the annotation file with hand tap timestamps
         onsetKeywords (list): list of column names to read from annotationFile
         vidPath (str): file path to original file
