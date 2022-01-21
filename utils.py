@@ -1,5 +1,7 @@
+from tkinter import E
 import warnings
 from matplotlib import pyplot as plt
+import matplotlib
 from matplotlib.colors import is_color_like
 import pandas as pd
 import numpy as np
@@ -34,7 +36,7 @@ def __check_axes(axes):
     if axes is None:
         axes = plt.gca()
 		
-    elif not isinstance(axes, plt.axes.Axes):
+    elif not isinstance(axes, matplotlib.axes.Axes):
         raise ValueError(
             "`axes` must be an instance of matplotlib.axes.Axes. "
             "Found type(axes)={}".format(type(axes))
@@ -83,7 +85,6 @@ def readCycleAnnotation(cyclePath, numDiv, startTime, duration, timeCol='Time', 
 		.. note::
 			If there are no provided annotations present during the relevant duration of audio, the function will return (None, None)
 	'''
-	pdb.set_trace()
 	cycle_df = pd.read_csv(cyclePath)
 	index_values = cycle_df.loc[(cycle_df[timeCol] >= startTime) & (cycle_df[timeCol] <= startTime + duration)].index.values
 	if len(index_values) == 0:
@@ -97,7 +98,7 @@ def readCycleAnnotation(cyclePath, numDiv, startTime, duration, timeCol='Time', 
 	return [provided], computed
 
 # ANNOTATION FUNCTION
-def readOnsetAnnotation(onsetPath, startTime, duration, timeCol='Time', onsetKeyword=['Inst']):
+def readOnsetAnnotation(onsetPath, startTime, duration, timeCol=['Time'], onsetKeyword=['Inst']):
 	'''Function to read onset annotations.
 
 	Reads an onset annotation csv file and returns the timestamps and annotation labels for annotations within a given time duration.
@@ -114,7 +115,7 @@ def readOnsetAnnotation(onsetPath, startTime, duration, timeCol='Time', onsetKey
 			Duration of the audio to be analysed.
 		
 		timeCol	: str
-			Column name of timestamps in onset annotation file.
+			Column name of timestamps in onset annotation file. #TODO: fix this; maybe make it a list or make it simpler#
 
 		onsetKeyword	: list or None
 			List of column names in the onset file to take onset labels from. For each onsetKeyword, a separate dataframe with onset annotations will be returned.
@@ -128,14 +129,14 @@ def readOnsetAnnotation(onsetPath, startTime, duration, timeCol='Time', onsetKey
 
 			If no onsets are present in the given time duration, None is returned.
 	'''
-	
+	# pdb.set_trace()
 	onset_df = pd.read_csv(onsetPath)
 	provided = []   # variable to store onset timestamps
 	if onsetKeyword is None:
 		# if onsetKeyword is None, return only timestamps
-		return [onset_df.loc[(onset_df[timeCol] >= startTime) & (onset_df[timeCol] <= startTime + duration), timeCol]]
+		return [onset_df.loc[(onset_df[timeCol[0]] >= startTime) & (onset_df[timeCol] <= startTime + duration), timeCol[0]]]
 	for keyword in onsetKeyword:
-		provided.append(onset_df.loc[(onset_df[timeCol] >= startTime) & (onset_df[timeCol] <= startTime + duration), [timeCol, onsetKeyword]])
+		provided.append(onset_df.loc[(onset_df[timeCol[0]] >= startTime) & (onset_df[timeCol[0]] <= startTime + duration), [timeCol[0], keyword]])
 	return provided if len(provided) > 0 else None 	# return None if no elements are in provided
 
 # ANNOTATION FUNCTION
@@ -159,7 +160,7 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword=None, onsetL
 
 			If `onsetLabelKeyword` is a list, the same column is used to determine timestep for every `onsetLabelKeyword` value(s).
 
-			If a list is provided, length of the list should be equal to the length of `onsetLabelKeyword` and `c`.
+			If a list is provided, length of the list should be equal to the length of `onsetLabelKeyword` and `c`. #TODO: reduce the if else statements to make it easier #
 
 		onsetLabelKeyword	: str or list or None
 			Column name(s) in the onset file to take annotation labels from. 
@@ -281,21 +282,30 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword=None, onsetL
 			raise ValueError(f"textColour has to be of type str or None when cyclePath is not None. Invalid textColour type: {type(textColour)}")
 
 		if isinstance(c, str):	
-			textColours = [c]  # colour of text
+			c = [c]  # colour of text
 		else:
 			raise ValueError(f"c has to be of type str or None when cyclePath is not None. Invalid c type: {type(c)}")
 		
 	elif onsetPath is not None:
-		if onsetLabelKeyword is None:
-			if not annotLabel:
-				# onsetLabelKeyword can be None only is annotLabel is False
-				timeCol = [onsetTimeKeyword]
-				if not is_color_like(c):
-					# if c is not of type color, then rais error
-					raise ValueError(f"Invalid type of c: {type(c)}. With onsetPath and annotLabel=False, c has to be of type color.")
-			else:
-				# if annotLabel is True, onsetLabelKeyword cannot be None
-				raise ValueError(f"Invalid type of onsetLabelKeyword. With annotLabel = {annotLabel}, onsetLabelKeyword cannot be {onsetLabelKeyword}")
+		pdb.set_trace()
+		if onsetTimeKeyword is None:
+			timeCol = ['Inst'] # TODO: make this accomodate lists also, for fig 9 #
+		else:
+			timeCol = onsetTimeKeyword
+		if onsetLabelKeyword is None: #TODO: onsetLabelKeyword should be able to take value None also (look at fig 9)#
+			labelCol = ['Label']
+			textColours = [textColour] if isinstance(textColour, str) else textColour
+			c = [c] if isinstance(c, str) else c #TODO fix this #
+		# if onsetLabelKeyword is None:
+		# 	if not annotLabel:
+		# 		# onsetLabelKeyword can be None only is annotLabel is False
+		# 		timeCol = [onsetTimeKeyword]
+		# 		if not is_color_like(c):
+		# 			# if c is not of type color, then rais error
+		# 			raise ValueError(f"Invalid type of c: {type(c)}. With onsetPath and annotLabel=False, c has to be of type color.")
+		# 	else:
+		# 		# if annotLabel is True, onsetLabelKeyword cannot be None
+		# 		raise ValueError(f"Invalid type of onsetLabelKeyword. With annotLabel = {annotLabel}, onsetLabelKeyword cannot be {onsetLabelKeyword}") # TODO: fix this and make it more readable#
 		elif isinstance(onsetLabelKeyword, str):
 			# onsetLabelKeyword is str
 			if not (isinstance(onsetTimeKeyword, str) and isinstance(c, str) and isinstance(textColour, str)):
@@ -336,7 +346,7 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword=None, onsetL
 			# onsetLabelKeyword is not str or list or None
 			raise ValueError(f"When using onsetPath, if annotLabel is True, onsetLabelKeyword has to be of type str or list, not {type(onsetLabelKeyword)}.")
 
-		provided = readOnsetAnnotation(onsetPath, startTime, duration, timeCol=timeCol, onsetLabelKeyword=labelCol)
+		provided = readOnsetAnnotation(onsetPath, startTime, duration, timeCol=timeCol, onsetKeyword=labelCol)
 		computed = None
 	else:
 		raise Exception('A cycle or onset path has to be provided for annotation')
@@ -347,26 +357,26 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword=None, onsetL
 	if computed is not None:
 		# plot computed annotations, valid only when `cyclePath` is not None
 		for computedVal in computed:
-			ax.axvline(computedVal - startTime, linestyle='--', c=c[0], alpha=0.4)
+			ax.axvline(computedVal, linestyle='--', c=c[0], alpha=0.4)
 	if provided is not None:
 		# plot the annotations from the file
 		for i, providedListVal in enumerate(provided):
 			firstLabel = True   # marker for first line for each value in  onsetLabelKeyword being plotted; to prevent duplicates from occuring in the legend
 			for _, providedVal in providedListVal.iterrows():
-				ax.axvline((providedVal[timeCol[i]]) - startTime, linestyle='-', c=c[i], label=labelCol[i] if firstLabel and cyclePath is None else '', alpha=alpha)  # add label only for first line of onset for each keyword
+				ax.axvline((providedVal[timeCol[i]]), linestyle='-', c=c[i], label=labelCol[i] if firstLabel and cyclePath is None else '', alpha=alpha)  # add label only for first line of onset for each keyword
 				if firstLabel:  firstLabel = False 	# make firstLabel False after plotting the first line for each value in onsetLabelKeyword
 				if annotLabel:
 					ylims = ax.get_ylim()   # used to set label at a height defined by `y`.
 					if isinstance(providedVal[labelCol[i]], str):
-						ax.annotate(f"{providedVal[labelCol[i]]}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*y + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c=textColours[i], fontsize=size)
+						ax.annotate(f"{providedVal[labelCol[i]]}", (providedVal[timeCol[i]], (ylims[1]-ylims[0])*y + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c=textColours[i], fontsize=size)
 					else:
-						ax.annotate(f"{float(providedVal[labelCol[i]]):g}", (providedVal[timeCol[i]]-startTime, (ylims[1]-ylims[0])*y + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c=textColours[i], fontsize=size)
+						ax.annotate(f"{float(providedVal[labelCol[i]]):g}", (providedVal[timeCol[i]], (ylims[1]-ylims[0])*y + ylims[0]), bbox=dict(facecolor='grey', edgecolor='white'), c=textColours[i], fontsize=size)
 	if onsetPath is not None and cyclePath is None:     # add legend only is onsets are given, i.e. legend is added
 		ax.legend()
 	return ax
 
 # COMPUTATION FUNCTION
-def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, maxPitch=660, notes=None, tonic=220, timeStep=0.01, octaveJumpCost=0.9, veryAccurate=True, ax=None, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', xticks=False, yticks=False, xlabel=True, ylabel=True, title='Pitch Contour (Cents)', annotLabel=True, cAnnot='purple', ylim=None, annotAlpha=0.8):
+def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, maxPitch=660, notes=None, tonic=220, timeStep=0.01, octaveJumpCost=0.9, veryAccurate=True, ax=None, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword=None, onsetLabelKeyword=None, xticks=False, yticks=False, xlabel=True, ylabel=True, title='Pitch Contour (Cents)', annotLabel=True, cAnnot='purple', ylim=None, annotAlpha=0.8):
 	'''Returns pitch contour (in cents) for the audio
 
 	Calculates the pitch contour of a given audio sample using autocorrelation method described in _[#]. The implementation of the algorithm is done using [#]_ and it's Python API _[#]. The pitch contour is converted to cents by making the tonic correspond to 0 cents.
@@ -562,10 +572,10 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
 		return (pitchvals, timevals)
 	else:
 		# plot the contour
-		return plotPitch(pitchvals, timevals, notes, ax, tonic, startTime, duration, freqXlabels, annotate=annotate, cyclePath=cyclePath, numDiv=numDiv, onsetPath=onsetPath, onsetTimeKeyword=onsetTimeKeyword, onsetLabelKeyword=onsetLabelKeyword, xticks=xticks, yticks=yticks, xlabel=xlabel, ylabel=ylabel, title=title, cAnnot=cAnnot, annotLabel=annotLabel, ylim=ylim, annotAlpha=annotAlpha)
+		return plotPitch(pitchvals, timevals, notes=notes, ax=ax, startTime=startTime, duration=duration, freqXlabels=freqXlabels, annotate=annotate, cyclePath=cyclePath, numDiv=numDiv, onsetPath=onsetPath, onsetTimeKeyword=onsetTimeKeyword, onsetLabelKeyword=onsetLabelKeyword, xticks=xticks, yticks=yticks, xlabel=xlabel, ylabel=ylabel, title=title, cAnnot=cAnnot, annotLabel=annotLabel, ylim=ylim, annotAlpha=annotAlpha)
 
 # PLOTTING FUNCTION
-def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, xlabel=True, ylabel=True, title='Pitch Contour (Cents)', annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True, ylim=None, annotAlpha=0.8, yAnnot=0.7, sizeAnnot=10):
+def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, xlabel=True, ylabel=True, title='Pitch Contour (Cents)', annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword=None, onsetLabelKeyword=None, cAnnot='purple', annotLabel=True, ylim=None, annotAlpha=0.8, yAnnot=0.7, sizeAnnot=10):
 	'''Plots the pitch contour
 
 	Plots the pitch contour passed in the `pitchvals` parameter, computed from `pitchContour()` function. 
@@ -738,7 +748,7 @@ def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, startTime=0, d
 	return ax
 
 # COMPUTATION FUNCTION
-def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, winSize=0.04, hopSize=0.01, n_fft=None, cmap='Blues', ax=None, amin=1e-5, freqXlabels=5, xticks=False, yticks=False, xlabel=True, ylabel=True, title='Spectrogram', annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True, ylim=(0, 5000), annotAlpha=0.8, yAnnot=0.7, sizeAnnot=10):
+def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, winSize=0.04, hopSize=0.01, n_fft=None, cmap='Blues', ax=None, amin=1e-5, freqXlabels=5, xticks=False, yticks=False, xlabel=True, ylabel=True, title='Spectrogram', annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword=None, onsetLabelKeyword=None, cAnnot='purple', annotLabel=True, ylim=(0, 5000), annotAlpha=0.8, yAnnot=0.7, sizeAnnot=10):
 	'''Computes spectrogram from the audio sample
 
 	Returns a plotted spectrogram if ax is not None, else returns the computed STFT on the audio.
@@ -902,10 +912,9 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 	winSizeSamples = int(np.ceil(sr*winSize))
 	hopSizeSamples = int(np.ceil(sr*hopSize))
 	if n_fft is None:
-		n_fftSamples = int(2**np.ceil(np.log2(winSize))) 	# set value of `n_fft` if it is None.
+		n_fftSamples = int(2**np.ceil(np.log2(winSizeSamples))) 	# set value of `n_fft` if it is None.
 	else:
 		n_fftSamples = int(np.ceil(sr*n_fft))
-
 	# STFT
 	f,t,X = sig.stft(audio, fs=sr, window='hann', nperseg=winSizeSamples, noverlap=(winSizeSamples-hopSizeSamples), nfft=n_fftSamples)
 	X_dB = librosa.power_to_db(np.abs(X), ref = np.max, amin=amin)
@@ -917,12 +926,10 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 		return (f, t, X_dB)
 
 	else:
-
-		#TODO call plotSpectrogram#
-		return ax
+		return plotSpectrogram(X_dB, t, f, sr=sr, startTime=startTime, duration=duration, hopSize=hopSizeSamples, cmap=cmap, ax=ax, freqXlabels=freqXlabels, xticks=xticks, yticks=yticks, xlabel=xlabel, ylabel=ylabel, title=title, annotate=annotate, cyclePath=cyclePath, numDiv=numDiv, onsetPath=onsetPath, onsetTimeKeyword=onsetTimeKeyword, onsetLabelKeyword=onsetLabelKeyword, cAnnot=cAnnot, annotLabel=annotLabel, ylim=ylim, annotAlpha=annotAlpha, yAnnot=yAnnot, sizeAnnot=sizeAnnot)
 
 # PLOTTING FUNCTION
-def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=160, cmap='Blues', ax=None, freqXlabels=5, xticks=False, yticks=False, xlabel=True, ylabel=True, title='Spectrogram', annotate=True, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True, ylim=(0, 5000), annotAlpha=0.8, yAnnot=0.7, sizeAnnot=10):
+def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=160, cmap='Blues', ax=None, freqXlabels=5, xticks=False, yticks=False, xlabel=True, ylabel=True, title='Spectrogram', annotate=True, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword=None, onsetLabelKeyword=None, cAnnot='purple', annotLabel=True, ylim=(0, 5000), annotAlpha=0.8, yAnnot=0.7, sizeAnnot=10):
 	'''Plots spectrogram
 
 	Uses `librosa.display.specshow()` to plot a spectrogram from a computed STFT. Annotations can be added is `annotate` is True.
@@ -1058,15 +1065,16 @@ def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=16
 	xlabel='Time (s)' if xlabel else '', 
 	title=title,
 	xlim=(startTime, startTime+duration), 
-	xticks=(np.arange(0, duration, freqXlabels)) if xticks else [], 
 	xticks=np.around(np.arange(math.ceil(t[0]), math.floor(t[-1]), freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
 	xticklabels=np.around(np.arange(math.ceil(t[0]), math.floor(t[-1]), freqXlabels)).astype(int) if xticks else [], 	# let the labels start from the integer values.
 	ylim=ylim,
-	yticks= np.linspace(ylim[0], ylim[1], 4) if yticks else [], 
-	yticklabels=[".2e".format(x) for x in np.linspace(ylim[0], ylim[1], 4)] if yticks else [])
+	yticks= np.arange(math.ceil(ylim[0]/1000)*1000, math.ceil(ylim[1]/1000)*1000, 2000) if yticks else [], #TODO: try to see if you can make this more general#
+	yticklabels=[f'{(x/1000).astype(int)}k' for x in np.arange(math.ceil(ylim[0]/1000)*1000, math.ceil(ylim[1]/1000)*1000, 2000)]  if yticks else [])
 
 	if annotate:
-		ax = drawAnnotation(cyclePath, onsetPath, onsetTimeKeyword, onsetLabelKeyword, numDiv, startTime, duration, ax, c=cAnnot, annotLabel=annotLabel, annotAlpha=annotAlpha, yAnnot=yAnnot, sizeAnnot=sizeAnnot)
+		ax = drawAnnotation(cyclePath, onsetPath, onsetTimeKeyword, onsetLabelKeyword, numDiv, startTime, duration, ax, c=cAnnot, annotLabel=annotLabel, alpha=annotAlpha, y=yAnnot, size=sizeAnnot)
+
+	return ax
 
 # PLOTTING FUNCTION
 def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, yticks=True, xlabel=True, ylabel=True, title='Waveform', freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, onsetTimeKeyword='Inst', onsetLabelKeyword='Label', cAnnot='purple', annotLabel=True, odf=False, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black', ylim=None, annotAlpha=0.8, yAnnot=0.7, sizeAnnot=10):
@@ -1236,13 +1244,13 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 	xlim=(0, duration), 
 	xticks=[] if not xticks else np.around(np.arange(math.ceil(startTime) - startTime, duration, freqXlabels)),
 	xticklabels=[] if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)).astype(int),
-	yticks=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 2), 
-	yticklabels=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 2), 
+	yticks=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 1), 
+	yticklabels=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 1), 
 	ylim=ylim,
 	title=title)
 
 	if annotate:
-		ax = drawAnnotation(cyclePath=cyclePath, onsetPath=onsetPath, numDiv=numDiv, startTime=startTime, duration=duration, ax=ax, c=cAnnot, annotLabel=annotLabel, annotAlpha=annotAlpha, yAnnot=yAnnot, sizeAnnot=sizeAnnot)
+		ax = drawAnnotation(cyclePath=cyclePath, onsetPath=onsetPath, numDiv=numDiv, startTime=startTime, duration=duration, ax=ax, c=cAnnot, annotLabel=annotLabel, alpha=annotAlpha, y=yAnnot, size=sizeAnnot)
 	
 	return ax
 
@@ -2466,7 +2474,7 @@ def plot_hand(annotationFile=None, startTime=0, duration=None, vidFps=25, ax=Non
 def annotateInteraction(axs, keywords, cs, interactionFile, startTime, duration):
 	'''Adds interaction annotation to the axes given. 
 
-	Height of each interaction is set randomly using `numpy.random.random()`. This is to prevent clashes between overlapping interaction annotations.
+	Height of each interaction is set randomly using `numpy.random.random()`. This is to prevent clashes between overlapping interaction annotations. #TODO: change this to be more systematic#
 
 	Used in fig 3.
 
@@ -2510,15 +2518,15 @@ def annotateInteraction(axs, keywords, cs, interactionFile, startTime, duration)
 			for _, annotation in annotations.loc[annotations['Type'] == keyword].iterrows():
 				rand = np.random.random()# random vertical displacement for the label
 				lims = axs[i].get_ylim()
-				axs[i].annotate('', xy=(annotation['Start Time'] - startTime, rand*(lims[1] - lims[0] - 100) + lims[0] + 50), xytext=(annotation['End Time'] - startTime, rand*(lims[1] - lims[0] - 100) + lims[0] + 50), arrowprops={'headlength': 0.4, 'headwidth': 0.2, 'width': 3, 'ec': cs[i], 'fc': cs[i]})
-				axs[i].annotate(annotation['Label'], (annotation['Start Time']-startTime+annotation['Duration']/2, rand*(lims[1] - lims[0] - 100) + lims[0] + 150), ha='center')
+				axs[i].annotate('', xy=(annotation['Start Time'], rand*(lims[1] - lims[0] - 100) + lims[0] + 50), xytext=(annotation['End Time'], rand*(lims[1] - lims[0] - 100) + lims[0] + 50), arrowprops={'headlength': 0.4, 'headwidth': 0.2, 'width': 3, 'ec': cs[i], 'fc': cs[i]})
+				axs[i].annotate(annotation['Label'], (annotation['Start Time'] +annotation['Duration']/2, rand*(lims[1] - lims[0] - 100) + lims[0] + 150), ha='center')
 		else:
 			# keyword corresponds to all axes
 			for ax in axs:
 				for _, annotation in annotations.loc[annotations['Type'] == keyword].iterrows():
 					rand = np.random.random()# random vertical displacement for the label
-					ax.annotate('', xy=(annotation['Start Time'] - startTime, rand*(lims[1] - lims[0] - 100) + lims[0] + 50), xytext=(annotation['End Time'] - startTime, rand*(lims[1] - lims[0] - 100) + lims[0] + 50), arrowprops={'headlength': 0.4, 'headwidth': 0.2, 'width': 3, 'ec':cs[i], 'fc': cs[i]})
-					ax.annotate(annotation['Label'], (annotation['Start Time']-startTime+annotation['Duration']/2, rand*(lims[1] - lims[0] - 100) + lims[0] + 150), ha='center') 
+					ax.annotate('', xy=(annotation['Start Time'], rand*(lims[1] - lims[0] - 100) + lims[0] + 50), xytext=(annotation['End Time'], rand*(lims[1] - lims[0] - 100) + lims[0] + 50), arrowprops={'headlength': 0.4, 'headwidth': 0.2, 'width': 3, 'ec':cs[i], 'fc': cs[i]})
+					ax.annotate(annotation['Label'], (annotation['Start Time'] + annotation['Duration']/2, rand*(lims[1] - lims[0] - 100) + lims[0] + 150), ha='center') 
 	return axs
 
 def drawHandTap(ax, handTaps, c='purple'):
