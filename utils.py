@@ -720,7 +720,7 @@ def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, startTime=0, d
     if timevals is None:
         warnings.warn('No time values provided, assuming 0.01 s time steps in pitch contour')
         timevals = np.arange(startTime, len(pitchvals)*0.01, 0.01)
-    #TODO: Added below block
+    #TODO-Rohit: Added below block
     if duration is None:
         warnings.warn('No duration provided, assuming last time step in pitch contour as duration')
         duration = timevals[-1]
@@ -1051,7 +1051,7 @@ def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=16
         If `annotate` is True, sent to `drawAnnotation()`.
     
     '''
-    # TODO: for some reason, below line is throwing an error due to x_coords and y_coords; I'm passing o/ps X,t,f from spectrogram function; if x_coords, y_coords not passed then function plots without error; need to debug
+    # TODO-Rohit: for some reason, below line is throwing an error due to x_coords and y_coords; I'm passing o/ps X,t,f from spectrogram function; if x_coords, y_coords not passed then function plots without error; need to debug
     #specshow(X_dB, x_coords=t, y_coords=f, x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap)
     specshow(X_dB,x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap)
 
@@ -1258,7 +1258,7 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 
 # PLOTTING FUNCTION
 def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duration=None, ax=None, winSize_odf=640, hopSize_odf=160, nFFT_odf=1024, source_odf='vocal', cOdf='black', updatePlot=False, xlabel=False, ylabel=False, xticks=False, yticks=False, title='Onset Detection Function', freqXlabels=5, ylim=True):
-	#TODO: added additional 'odf' parameter; in the spirit of separating our computation and plotting functions, this function should also ideally just plot odf, given odf as a parameter. But for now, I've added odf as a parameter and not removed audio input.
+	#TODO-Rohit: added additional 'odf' parameter; in the spirit of separating our computation and plotting functions, this function should also ideally just plot odf, given odf as a parameter. But for now, I've added odf as a parameter and not removed audio input.
     '''
     Plots onset detection function if `ax` is provided. Function comes from `getODF()`.
     
@@ -1374,10 +1374,10 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
         duration = len(odf_vals)*hopSize_odf/sr
 
     # set time and odf values in variables
-    time_vals = np.arange(startTime, startTime+duration, hopSize_odf/sr) #TODO: changed last argument to hopsize_odf/sr because hopsize_odf is in frames now 
+    time_vals = np.arange(startTime, startTime+duration, hopSize_odf/sr) #TODO-Rohit: changed last argument to hopsize_odf/sr because hopsize_odf is in frames now 
     
     #odf_vals = odf_vals[:-1]    # disregard the last frame of odf_vals since it is centered around the frame at time stamp `startTime`` + `duration``
-    # TODO: not sure above line is necessary. I got length mismatch errors so commented it. We could instead add code to make lengths same like below:
+    # TODO-Rohit: not sure above line is necessary. I got length mismatch errors so commented it. We could instead add code to make lengths same like below:
     # odf_vals = odf_vals[: min((len(time_vals), len(time_vals)))]
     # time_vals = time_vals[: min((len(time_vals), len(time_vals)))]
     
@@ -1385,7 +1385,7 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
         # if ax is None, return (odf_vals, time_vals)
         return (odf_vals, time_vals)
     else:
-        #TODO added below 'if updatePlot' block to retain existing ax properties in case odf is being plotted on top of waveform. Can add this block in other plotting functions too
+        #TODO-Rohit added below 'if updatePlot' block to retain existing ax properties in case odf is being plotted on top of waveform. Can add this block in other plotting functions too
         if updatePlot:
             xticks_, yticks_, xticklabels_, yticklabels_, title_, xlabel_, ylabel_ = ax.get_xticks(), ax.get_yticks(), ax.get_xticklabels(), ax.get_yticklabels(), ax.get_title(), ax.get_xlabel(), ax.get_ylabel()
         else:
@@ -1399,8 +1399,8 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
         xlim=(0, duration), 
         xticks=xticks_ if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)),
         xticklabels=xticklabels_ if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)).astype(int),
-        yticks=yticks_ if not yticks else np.around(np.linspace(-max_abs_val,max_abs_val, 3), 2), #TODO linspace args edited from min & max(audio)
-        yticklabels=yticklabels_ if not yticks else np.around(np.linspace(-np.max(odf_vals),np.max(odf_vals), 3), 2), #TODO linspace args edited from min & max(audio)
+        yticks=yticks_ if not yticks else np.around(np.linspace(-max_abs_val,max_abs_val, 3), 2), #TODO-Rohit linspace args edited from min & max(audio)
+        yticklabels=yticklabels_ if not yticks else np.around(np.linspace(-np.max(odf_vals),np.max(odf_vals), 3), 2), #TODO-Rohit linspace args edited from min & max(audio)
         ylim= ax.get_ylim() if ylim is not None else (-max_abs_val, max_abs_val),
         title=title_) 
         return ax
