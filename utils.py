@@ -1,7 +1,4 @@
-from cProfile import label
-from calendar import c
 from tkinter import E
-from turtle import color
 import warnings
 from matplotlib import pyplot as plt
 import matplotlib
@@ -20,31 +17,32 @@ import ffmpeg
 import os
 import cv2
 from collections import defaultdict
-
-import pdb
 import utils_fmp as fmp
 
+
+#TODO- add audioPath can be None to all docstrings#
 #set seaborn theme parameters for plots
 sns.set_theme(rc={"xtick.bottom" : True, "ytick.left" : False, "xtick.major.size":4, "xtick.minor.size":2, "ytick.major.size":4, "ytick.minor.size":2, "xtick.labelsize": 10, "ytick.labelsize": 10})
 
 # HELPER FUNCTION
 def __check_axes(axes):
-    """Check if `axes` is an instance of an `matplotlib.axes.Axes` object. If not, use `plt.gca()`.
+	"""Check if `axes` is an instance of an `matplotlib.axes.Axes` object. If not, use `plt.gca()`.
 	
 	This function is a modified version from [#]_.
 
 	.. [#] McFee, Brian, Colin Raffel, Dawen Liang, Daniel PW Ellis, Matt McVicar, Eric Battenberg, and Oriol Nieto. “librosa: Audio and music signal analysis in python.” In Proceedings of the 14th python in science conference, pp. 18-25. 2015.
 
 	"""
-    if axes is None:
-        axes = plt.gca()
+	
+	if axes is None:
+		axes = plt.gca()
 		
-    elif not isinstance(axes, matplotlib.axes.Axes):
-        raise ValueError(
-            "`axes` must be an instance of matplotlib.axes.Axes. "
-            "Found type(axes)={}".format(type(axes))
-        )
-    return axes
+	elif not isinstance(axes, matplotlib.axes.Axes):
+		raise ValueError(
+			"`axes` must be an instance of matplotlib.axes.Axes. "
+			"Found type(axes)={}".format(type(axes))
+		)
+	return axes
 
 # ANNOTATION FUNCTION
 def readCycleAnnotation(cyclePath, numDiv, startTime, duration, timeCol='Time', labelCol='Cycle'):
@@ -142,7 +140,7 @@ def readOnsetAnnotation(onsetPath, startTime, duration, timeCol='Inst', labelCol
 
 	onset_df = pd.read_csv(onsetPath)
 	if labelCol is None:
-		# if onsetKeyword is None, return only timestamps
+		# if labelCol is None, return only timestamps
 		return onset_df.loc[(onset_df[timeCol] >= startTime) & (onset_df[timeCol] <= startTime + duration), [timeCol]]
 	else:
 		provided = onset_df.loc[(onset_df[timeCol] >= startTime) & (onset_df[timeCol] <= startTime + duration), [timeCol, labelCol]]
@@ -360,7 +358,7 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
 			If audio is None and audioPath is not None, defines sample rate to load the audio at.
 
 		audioPath	: str, int, pathlib.Path or file-like object
-        	Path to the input file.
+			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
@@ -557,12 +555,15 @@ def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, startTime=0, d
 	if timevals is None:
 		warnings.warn('No time values provided, assuming 0.01 s time steps in pitch contour')
 		timevals = np.arange(startTime, len(pitchvals)*0.01, 0.01)
-
+	#TODO-Rohit: Added below block -> Nithya- I changed duration to take the difference between the last and first time step
+	if duration is None:
+		warnings.warn('No duration provided, assuming difference between the last and the first time step in pitch contour as duration')
+		duration = timevals[-1] - timevals[0]
 	# if ax is None, use the `plt.gca()` to use current axes object
 	ax = __check_axes(ax)
 	
 	ax = sns.lineplot(x=timevals, y=pitchvals, ax=ax, color=c)
-	ax.set(xlabel='Time Stamp (s)' if xlabel else '', 
+	ax.set(xlabel='Time (s)' if xlabel else '', 
 	ylabel='Notes' if ylabel else '', 
 	title=title, 
 	xlim=(startTime, startTime+duration), 
@@ -582,7 +583,7 @@ def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, startTime=0, d
 	return ax
 
 # COMPUTATION FUNCTION
-def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, winSize=0.04, hopSize=0.01, n_fft=None, ax=None, amin=1e-5, **kwargs): 
+def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, winSize=640, hopSize=160, nFFT=1024, ax=None, amin=1e-5, **kwargs): 
 	'''Computes spectrogram from the audio sample
 
 	Returns a plotted spectrogram if ax is not None, else returns the computed STFT on the audio.
@@ -604,7 +605,7 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 			If audio is None and audioPath is not None, defines sample rate to load the audio at.
 
 		audioPath	: str, int, pathlib.Path or file-like object
-        	Path to the input file.
+			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
@@ -620,16 +621,16 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 				- If `audio` is None, duration is inferred from the audio.
 				- If `audio` is None and `audioPath` is not None, the entire song is loaded.
 
-		winSize	: float > 0
-			Size of window for STFT (in seconds)
+		winSize    : int > 0
+			Size of window for STFT (in frames)
 
-		hopSize	: float > 0
-			Size of hop for STFT (in seconds)
+		hopSize    : int > 0
+			Size of hop for STFT (in frames)
 
-		n_fft	: int or None
-			DFT size (in seconds)
+		nFFT    : int or None
+			DFT size
 
-			If n_fft is None, it takes the value of the closest power of 2 >= winSize (in samples).
+			If nFFT is None, it takes the value of the closest power of 2 >= winSize (in samples).
 
 		ax	: matplotlib.axes.Axes or None
 			Axes to plot spectrogram in. 
@@ -655,17 +656,12 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 		audio, sr = librosa.load(audioPath, sr=sr, mono=True, offset=startTime, duration=duration)
 	if duration is None:
 		duration = librosa.get_duration(audio, sr=sr) 	
-		# audio = audio[:int(duration*sr)]    # ensure that audio length = duration
 	
-	# convert winSize and hopSize from seconds to samples
-	winSizeSamples = int(np.ceil(sr*winSize))
-	hopSizeSamples = int(np.ceil(sr*hopSize))
-	if n_fft is None:
-		n_fftSamples = int(2**np.ceil(np.log2(winSizeSamples))) 	# set value of `n_fft` if it is None.
-	else:
-		n_fftSamples = int(np.ceil(sr*n_fft))
+	if nFFT is None:
+		nFFT = int(2**np.ceil(np.log2(winSize)))     # set value of `nFFT` if it is None.
+
 	# STFT
-	f,t,X = sig.stft(audio, fs=sr, window='hann', nperseg=winSizeSamples, noverlap=(winSizeSamples-hopSizeSamples), nfft=n_fftSamples)
+	f,t,X = sig.stft(audio, fs=sr, window='hann', nperseg=winSize, noverlap=(winSize-hopSize), nfft=nFFT)
 	X_dB = librosa.power_to_db(np.abs(X), ref = np.max, amin=amin)
 	t += startTime 	# add start time to time segments extracted.
 
@@ -678,7 +674,7 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 		return plotSpectrogram(X_dB, t, f, sr=sr, startTime=startTime, duration=duration, ax=ax, **kwargs)
 
 # PLOTTING FUNCTION
-def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=160, cmap='Blues', ax=None, freqXlabels=5, xticks=False, yticks=False, xlabel=True, ylabel=True, title='Spectrogram', annotate=True, ylim=(0, 5000), **kwargs): 
+def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=160, cmap='Blues', ax=None, freqXlabels=5, xticks=True, yticks=True, xlabel=True, ylabel=True, title='Spectrogram', annotate=True, ylim=(0, 5000), **kwargs): 
 	'''Plots spectrogram
 
 	Uses `librosa.display.specshow()` to plot a spectrogram from a computed STFT. Annotations can be added is `annotate` is True.
@@ -716,7 +712,7 @@ def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=16
 		Used to extract relavant annotation in `drawAnnotation()`.
 
 	hopSize	: int > 0
-		Size of hop for STFT (in seconds)
+		Size of hop for STFT (in frames)
 
 	cmap	: matplotlib.colors.Colormap or str
 		Colormap to use to plot spectrogram.
@@ -757,11 +753,17 @@ def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=16
 	kwargs	: Additional arguements provided to `drawAnnotation()` if `annotate` is True.
 	
 	'''
-	specshow(X_dB, x_coords=t, y_coords=f, x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap)
+	 # TODO-Rohit: for some reason, below line is throwing an error due to x_coords and y_coords; I'm passing o/ps X,t,f from spectrogram function; if x_coords, y_coords not passed then function plots without error; need to debug
+	#specshow(X_dB, x_coords=t, y_coords=f, x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap)
+	specshow(X_dB,x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap)
 
 	# set ylim if required
 	if ylim is None:
 		ylim = ax.get_ylim()
+
+	# Added below block -> Nithya - added `- t[0]`
+	if duration is None:
+		duration = t[-1] - t[0]
 
 	# set axes params
 	ax.set(ylabel='Frequency (Hz)' if ylabel else '', 
@@ -780,7 +782,7 @@ def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=16
 	return ax
 
 # PLOTTING FUNCTION
-def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, yticks=True, xlabel=True, ylabel=True, title='Waveform', freqXlabels=5, annotate=False, odf=False, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black', ylim=None, **kwargs): 
+def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, yticks=True, xlabel=True, ylabel=True, title='Waveform', freqXlabels=5, annotate=False, odf=False, winSize_odf=640, hopSize_odf=160, nFFT_odf=1024, source_odf='vocal', cOdf='black', ylim=None, **kwargs): 
 	'''Plots the wave plot of the audio
 
 	Plots the waveform of the given audio using `librosa.display.waveshow()`.
@@ -796,7 +798,7 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 			If audio is None and audioPath is not None, defines sample rate to load the audio at
 
 		audioPath	: str, int, pathlib.Path or file-like object
-        	Path to the input file.
+			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
@@ -840,32 +842,32 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 
 			Uses `getOnsetActivation()` to compute ODF.
 
-		winSize_odf	: float
-			Window size (in seconds) used by the onset detection function.
+		winSize_odf    : int
+			Window size (in frames) used by the onset detection function.
 
-			If `odf` is True, passed to the `getOnsetActivation()` function.
+			If `odf` is True, passed to the `getODF()` function.
 
-		hopSize_odf	: float
-			Hop size (in seconds) used by the onset detection function.
+		hopSize_odf    : int
+			Hop size (in frames) used by the onset detection function.
 
-			If `odf` is True, passed to the `getOnsetActivation()` function.
+			If `odf` is True, passed to the `getODF()` function.
 
-		nFFT_odf	: float
-			Size of DFT (in seconds) used in onset detection function.
+		nFFT_odf    : int
+			Size of DFT used in onset detection function.
 
-			If `odf` is True, passed to the `getOnsetActivation()` function.
+			If `odf` is True, passed to the `getODF()` function.
 
 		source_odf	: str
 			Defines type of instrument in the audio. Accepted values are:
 			- 'vocal'
 			- 'pakhawaj'
 			
-			Used in the `getOnsetActivation()` only if `odf` is True.
+			Used in the `getODF()` only if `odf` is True.
 
 		cOdf	: color 
 			Colour to plot onset detection function in.
 
-			If `odf` is True, passed to the `getOnsetActivation()` function.
+			If `odf` is True, passed to the `getODF()` function.
 
 		ylim	: (float, float) or None
 			(min, max) limits for the y axis.
@@ -912,9 +914,10 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 	return ax
 
 # PLOTTING FUNCTION
-def plotODF(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black', xlabel=False, ylabel=False, xticks=False, yticks=False, title='Onset Detection Function', freqXlabels=5, ylim=True):
+def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duration=None, ax=None, winSize_odf=640, hopSize_odf=160, nFFT_odf=1024, source_odf='vocal', cOdf='black', updatePlot=False, xlabel=False, ylabel=False, xticks=False, yticks=False, title='Onset Detection Function', freqXlabels=5, ylim=True):
+	#TODO-Rohit: added additional 'odf' parameter; in the spirit of separating our computation and plotting functions, this function should also ideally just plot odf, given odf as a parameter. But for now, I've added odf as a parameter and not removed audio input.
 	'''
-	Plots onset detection function if `ax` is provided. Function comes from `getOnsetActivation()`.
+	Plots onset detection function if `ax` is provided. Function comes from `getODF()`.
 	
 	If `ax` is None, function returns a tuple with 2 arrays - onset detection function values and time stamps
 
@@ -929,11 +932,16 @@ def plotODF(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax
 			If audio is None and audioPath is not None, defines sample rate to load the audio at
 
 		audioPath	: str, int, pathlib.Path or file-like object
-        	Path to the input file.
+			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
 			Sent to `librosa.load()` as `path` parameter. 
+
+		odf : ndarray
+			Extracted onset detection function, if already available
+			
+			Can be obtained using `getODF()` function
 
 		startTime	: float; default=0
 			Time stamp to consider audio from.
@@ -948,32 +956,35 @@ def plotODF(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax
 		ax	: matplotlib.axes.Axes
 			Axes object to plot waveplot in.
 
-		winSize_odf	: float
-			Window size (in seconds) used by the onset detection function.
+		winSize_odf    : int
+			Window size (in frames) used by the onset detection function.
 
-			If `odf` is True, passed to the `getOnsetActivation()` function.
+			If `odf` is True, passed to the `getODF()` function.
 
-		hopSize_odf	: float
-			Hop size (in seconds) used by the onset detection function.
+		hopSize_odf    : int
+			Hop size (in frames) used by the onset detection function.
 
-			If `odf` is True, passed to the `getOnsetActivation()` function.
+			If `odf` is True, passed to the `getODF()` function.
 
-		nFFT_odf	: float
-			Size of DFT (in seconds) used in onset detection function.
+		nFFT_odf    : int
+			Size of DFT used in onset detection function.
 
-			If `odf` is True, passed to the `getOnsetActivation()` function.
+			If `odf` is True, passed to the `getODF()` function.
 
 		source_odf	: str
 			Defines type of instrument in the audio. Accepted values are:
 			- 'vocal'
 			- 'pakhawaj'
 			
-			Used in the `getOnsetActivation()` only if `odf` is True.
+			Used in the `getODF()` only if `odf` is True.
 
 		cOdf	: color 
 			Colour to plot onset detection function in.
 
 			If `odf` is True, passed to the `getOnsetActivation()` function.
+
+		updatePlot  : bool
+			If odf being plotting on figure with waveform, then retain axis labels and properties
 
 		xticks	: bool
 			If True, will add xticklabels to plot.
@@ -1007,83 +1018,52 @@ def plotODF(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax
 			If `ax` is None, returns a tuple with ODF values and time stamps.
 	'''
 
-	if audio is None:
-		audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
-	if duration is None:
-		duration = librosa.get_duration(audio, sr=sr)
-	
-	odf_vals, _, _ = getOnsetActivation(x=audio, audioPath=None, startTime=startTime, duration=duration, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
+	if odf is None:
+
+		if audio is None:
+			audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
+		if duration is None:
+			duration = librosa.get_duration(audio, sr=sr)
+		
+		odf_vals, _ = getODF(audio=audio, audioPath=None, startTime=startTime, duration=duration, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
+
+	else:
+		odf_vals = odf.copy()
+		duration = len(odf_vals)*hopSize_odf/sr
 	
 	# set time and odf values in variables
-	time_vals = np.arange(startTime, startTime+duration, hopSize_odf)
-	odf_vals = odf_vals[:-1]    # disregard the last frame of odf_vals since it is centered around the frame at time stamp `startTime`` + `duration``
+	time_vals = np.arange(startTime, startTime+duration, hopSize_odf/sr)
+	#TODO-Rohit: changed last argument to hopsize_odf/sr because hopsize_odf is in frames now 
+	
+	#odf_vals = odf_vals[:-1]    # disregard the last frame of odf_vals since it is centered around the frame at time stamp `startTime`` + `duration``
+	# TODO-Rohit: not sure above line is necessary. I got length mismatch errors so commented it. We could instead add code to make lengths same like below:
+	# odf_vals = odf_vals[: min((len(time_vals), len(time_vals)))]
+	# time_vals = time_vals[: min((len(time_vals), len(time_vals)))]
+
 
 	if ax is None:
 		# if ax is None, return (odf_vals, time_vals)
 		return (odf_vals, time_vals)
 	else:
+		#TODO-Rohit added below 'if updatePlot' block to retain existing ax properties in case odf is being plotted on top of waveform. Can add this block in other plotting functions too
+		if updatePlot:
+			xticks_, yticks_, xticklabels_, yticklabels_, title_, xlabel_, ylabel_ = ax.get_xticks(), ax.get_yticks(), ax.get_xticklabels(), ax.get_yticklabels(), ax.get_title(), ax.get_xlabel(), ax.get_ylabel()
+		else:
+			xticks_, yticks_, xticklabels_, yticklabels_, title_, xlabel_, ylabel_ = [],[],[],[],'','',''
+
 		ax.plot(time_vals, odf_vals, c=cOdf)     # plot odf_vals and consider odf_vals for all values except the last frame
-		max_abs_val = max(abs(min(odf_vals)), abs(max(odf_vals)))   # find maximum value to set y limits to ensure symmetrical plot
+		max_abs_val = max(abs(odf_vals))   # find maximum value to set y limits to ensure symmetrical plot
 		# set ax parameters only if they are not None
-		ax.set(xlabel='' if not xlabel else 'Time (s)', 
-		ylabel = '' if not ylabel else 'ODF',
+		ax.set(xlabel=xlabel_ if not xlabel else 'Time (s)', 
+		ylabel = ylabel_ if not ylabel else 'ODF',
 		xlim=(0, duration), 
-		xticks=[] if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)),
-		xticklabels=[] if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)).astype(int),
-		yticks=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 2), 
-		yticklabels=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 2), 
+		xticks=xticks_ if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)),
+		xticklabels=xticklabels_ if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)).astype(int),
+		yticks=yticks_ if not yticks else np.around(np.linspace(-max_abs_val,max_abs_val, 3), 2), #TODO-Rohit linspace args edited from min & max(audio)
+		yticklabels=yticklabels_ if not yticks else np.around(np.linspace(-np.max(odf_vals),np.max(odf_vals), 3), 2), #TODO-Rohit linspace args edited from min & max(audio)
 		ylim= ax.get_ylim() if ylim is not None else (-max_abs_val, max_abs_val),
-		title=title) 
+		title=title_) 
 		return ax
-
-# def plotEnergy(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, cAnnot='purple', annotLabel=True, winSize_odf=0.4, hopSize_odf=0.01, nFFT_odf=1024, source_odf='vocal', cOdf='black'):
-# 	'''
-# 	For debugging puposes only - plots energy function used to calculate odf
-
-# 	Parameters:
-# 		audio: loaded audio time series
-# 		sr: sample rate that audio time series is loaded/ is to be loaded in
-# 		audioPath: path to the audio file
-# 		startTime: time to start reading the audio at
-# 		duration: duration of audio to load
-# 		ax: axis to plot waveplot in
-# 		xticks: if True, will plot xticklabels
-# 		freqXlabels: time (in seconds) after which each x label occurs
-# 		annotate: if True, will annotate tala markings
-# 		cyclePath: path to file with tala cycle annotations
-# 		numDiv: number of divisions to put between each annotation marking
-# 		onsetPath: path to file with onset annotations; only considered if cyclePath is None
-# 		cAnnot: colour for the annotation marking
-# 		annotLabel: if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
-# 		odf: if True, will plot the onset detection function over the wave form
-# 		winSize_odf: window size, fed to the onset detection function; valid only if odf is true
-# 		hopSize_odf: hop size in seconds, fed to the onset detection function; valid only if odf is true
-# 		nFFT_odf: size of DFT used in onset detection function; valid only if odf is true
-# 		source_odf: type of instrument - vocal or pakhawaj, fed to odf; valid only if odf is true
-# 		cOdf: colour to plot onset detection function in; valid only if odf is true
-# 	'''
-# 	if ax is None:
-# 		Exception('ax parameter has to be provided')
-# 	startTime = math.floor(startTime)   # set start time to an integer, for better readability on the x axis of the plot
-# 	if audio is None:
-# 		audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
-# 		audio /= np.max(np.abs(audio))
-# 	if duration is None:
-# 		duration = librosa.get_duration(audio, sr=sr)
-# 		duration = math.floor(duration)  # set duration to an integer, for better readability on the x axis of the plot
-# 		audio = audio[:int(duration*sr)]    # ensure that audio length = duration
-# 	ax.set(xlabel='' if not xticks else 'Time (s)', 
-# 	xlim=(0, duration), 
-# 	xticks=[] if not xticks else np.around(np.arange(0, duration, freqXlabels)),
-# 	xticklabels=[] if not xticks else np.around(np.arange(startTime, duration+startTime, freqXlabels), 2),
-# 	title='Energy Contour', 
-# 	ylabel='dB')
-
-# 	_, _, energy = getOnsetActivation(x=audio, audioPath=None, startTime=0, duration=duration, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
-# 	ax.plot(np.arange(0, duration, hopSize_odf), energy[:-1], c=cOdf)
-# 	if annotate:
-# 		ax = drawAnnotation(cyclePath=cyclePath, onsetPath=onsetPath, numDiv=numDiv, startTime=startTime, duration=duration, ax=ax, c=cAnnot, annotLabel=annotLabel)
-# 	return ax
 
 # AUDIO MANIPULATION	
 def playAudio(audio=None, sr=16000, audioPath=None, startTime=0, duration=None):
@@ -1100,7 +1080,7 @@ def playAudio(audio=None, sr=16000, audioPath=None, startTime=0, duration=None):
 			If audio is None and audioPath is not None, defines sample rate to load the audio at.
 
 		audioPath	: str, int, pathlib.Path or file-like object
-        	Path to the input file.
+			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
@@ -1113,11 +1093,13 @@ def playAudio(audio=None, sr=16000, audioPath=None, startTime=0, duration=None):
 			If duration is None
 				- If `audio` is None, duration is inferred from the audio.
 				- If `audio` is None and `audioPath` is not None, the entire song is loaded.
-	Returns:
+	Returns
+	-------
 		iPython.display.Audio 
 			Object that plays the audio.
 	'''
 	if audio is None:
+		# TODO Nithya: I changed the sr parameter value to sr here (from None). Not sure if I had added the None or not, let me know if you think it should be different
 		audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
 	return Audio(audio, rate=sr)
 
@@ -1138,7 +1120,7 @@ def playAudioWClicks(audio=None, sr=16000, audioPath=None, startTime=0, duration
 			If audio is None and audioPath is not None, defines sample rate to load the audio at.
 
 		audioPath	: str, int, pathlib.Path or file-like object
-        	Path to the input file.
+			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
@@ -1165,7 +1147,8 @@ def playAudioWClicks(audio=None, sr=16000, audioPath=None, startTime=0, duration
 			
 			If None, will not save any audio file.
 
-	Returns:
+	Returns
+	-------
 		iPython.display.Audio 
 			Object that plays the audio with clicks.
 	'''
@@ -1306,37 +1289,29 @@ def generateFig(noRows, figSize=(14, 7), heightRatios=None):
 	'''
 	if len(heightRatios) != noRows:
 		Exception("Length of heightRatios has to be equal to noRows")
-	# if heightRatios is None:
-	# 	# if heightRatios is None
-	# 	heightRatios = np.ones(noRows) 	#TODO: check that this works and remove#
+
 	fig = plt.figure(figsize=figSize)
 	specs = fig.add_gridspec(noRows, 1, height_ratios = heightRatios)
 	axs = [fig.add_subplot(specs[i, 0]) for i in range(noRows)]
 	return fig, axs
 
-def to_dB(x, C):
-	'''Applies logarithmic (base 10) transformation
-	
-	Parameters:
-		x: input signal
-		C: scaling constant
-	
-	Returns
-		log-scaled x
-	'''
-	return np.log10(1 + x*C)/(np.log10(1+C))
 
-## Onset detection related
 def subBandEner(X,fs,band):
-	'''Computes spectral sub-band energy by summing squared magnitude values of STFT over specified spectral band (suitable for vocal onset detection)
+	'''Computes spectral sub-band energy by summing squared magnitude values of STFT over specified spectral band (suitable for vocal onset detection).
 
-	Parameters:
-		X: STFT of an audio signal x
-		fs: sampling rate
-		band: edge frequencies (in Hz) of the sub-band of interest
+	Parameters
+	----------
+		X   : ndarray
+			STFT of an audio signal x
+		fs  : int or float
+			Sampling rate
+		band    : list or tuple or ndarray
+			Edge frequencies (in Hz) of the sub-band of interest
 		
 	Returns
-		sbe: array with each value representing the magnitude STFT values in a short-time frame squared & summed over the sub-band
+	----------
+		sbe : ndarray
+			Array with each value representing the magnitude STFT values in a short-time frame squared & summed over the sub-band
 	'''
 
 	#convert band edge frequencies to bin numbers
@@ -1348,19 +1323,25 @@ def subBandEner(X,fs,band):
 
 	return sbe
 
-def biphasicDerivative(x, hopDur, norm=1, rectify=1):
-	'''Computes the biphasic derivative of a signal(See [1] for a detailed explanation of the algorithm)
+def biphasicDerivative(x, hopDur, norm=True, rectify=True):
+	'''Computes the biphasic derivative of a signal(See [1] for a detailed explanation of the algorithm).
 	
-	Parameters:
-		x: input signal
-		hopDur: sampling interval in seconds of input signal (reciprocal of sampling rate of x)
-		norm (1 or 0): if output is to be normalized
-		rectify (1 or 0): if output is to be rectified to keep only positive values (sufficient for peak-picking)
+	Parameters
+	----------
+		x   : ndarray
+			Input signal
+		hopDur  : float
+			Sampling interval in seconds of input signal (reciprocal of sampling rate of x)
+		norm    :bool
+			If output is to be normalized
+		rectify :bool
+			If output is to be rectified to keep only positive values (sufficient for peak-picking)
 	
 	Returns
-		x: after computing the biphasic derivative of input (i.e, convolving with a biphasic derivative filter)
+	----------
+		x   : ndarray
+			Output of convolving input with the biphasic derivative filter
 
-	[1] Rao, P., Vinutha, T.P. and Rohit, M.A., 2020. Structural Segmentation of Alap in Dhrupad Vocal Concerts. Transactions of the International Society for Music Information Retrieval, 3(1), pp.137–152. DOI: http://doi.org/10.5334/tismir.64
 	'''
 
 	#sampling instants
@@ -1382,11 +1363,11 @@ def biphasicDerivative(x, hopDur, norm=1, rectify=1):
 	x = -1*x
 
 	#normalise and rectify
-	if norm==1:
+	if norm:
 		x/=np.max(x)
 		x-=np.mean(x)
 
-	if rectify==1:
+	if rectify:
 		x*=(x>0)
 
 	return x
@@ -1395,68 +1376,79 @@ def toDB(x, C):
 	'''Applies logarithmic (base 10) transformation (based on [1])
 	
 	Parameters
-		x: input signal
-		C: scaling constant
+	----------
+		x   : ndarray
+			Input signal
+		C   : int or float
+			Scaling constant
 	
 	Returns
+	----------
 		log-scaled x
 	'''
 	return np.log10(1 + x*C)/(np.log10(1+C))
 
-def getOnsetActivation(x=None, audioPath=None, startTime=0, duration=None, fs=16000, winSize=0.4, hopSize=0.01, nFFT=1024, source='vocal'):
-	'''Computes onset activation function from audio signal using short-time spectrum based methods
+def getODF(audio=None, audioPath=None, startTime=0, duration=None, fs=16000, winSize=640, hopSize=160, nFFT=1024, source='vocal'):
+	'''Computes onset activation function from audio signal using short-time spectrum based methods.
 
-	Parameters:
-		x: audio signal array
-		audioPath: path to the audio file
-		startTime: time to start reading the audio at
-		duration: duration of audio to read
-		fs: sampling rate to read audio at
-		winSize: window size in seconds for STFT
-		hopSize: hop size in seconds for STFT
-		nFFT: DFT size
-		source: choice of instrument - 'vocal' or 'perc' (percussion)
+	Parameters
+	----------
+		audio   : ndarray
+			Audio signal
+		audioPath  : str
+			Path to the audio file
+		startTime   : int or float
+			Time to start reading the audio at
+		duration    : int or float
+			Duration of audio to read
+		fs  : int or float
+			Sampling rate to read audio at
+		winSize : int
+			Window size (in frames) for STFT
+		hopSize : int
+			Hop size (in frames) for STFT
+		nFFT    : int
+			DFT size
+		source  : str
+			Source instrument in audio - one of 'vocal' or 'perc' (percussion)
 
 	Returns
-		odf: the frame-wise onset activation function (at a sampling rate of 1/hopSize)
-		onsets: time locations of detected onset peaks in the odf (peaks detected using peak picker from librosa)
+	----------
+		odf : ndarray
+			Frame-wise onset activation function (at a sampling rate of 1/hopSize)
+		onsets  ndarray
+			Time locations of detected onset peaks in the odf (peaks detected using peak picker from librosa)
 	'''
 
-	#convert short-time analysis parameters from seconds to frames
-	winSize = int(np.ceil(winSize*fs))
-	hopSize = int(np.ceil(hopSize*fs))
-	nFFT = int(2**(np.ceil(np.log2(winSize))))
-	
 	#if audio signal is provided
-	if x is not None:
+	if audio is not None:
 		#select segment of interest from audio based on start time and duration
 		if duration is None:
-			duration = len(x)/fs - startTime
-		x = x[int(np.ceil(startTime*fs)):int(np.ceil(startTime+duration))]
+			audio = audio[int(np.ceil(startTime*fs)):]
+		else:
+			audio = audio[int(np.ceil(startTime*fs)):int(np.ceil((startTime+duration)*fs))]
 
 	#if audio path is provided
 	elif audioPath is not None:
-		if duration is None:
-			duration = librosa.get_duration(audioPath, sr=fs)
-		x,_ = librosa.load(audioPath, sr=fs, offset=startTime, duration=duration)
+		audio,_ = librosa.load(audioPath, sr=fs, offset=startTime, duration=duration)
 
 	else:
 		print('Provide either the audio signal or path to the stored audio file on disk')
 		raise
 
 	#fade in and out ends of audio to prevent spurious onsets due to abrupt start and end
-	x = fadeIn(x,int(0.5*fs))
-	x = fadeOut(x,int(0.5*fs))
+	audio = fadeIn(audio,int(0.5*fs))
+	audio = fadeOut(audio,int(0.5*fs))
 
 	#compute magnitude STFT
-	X,_ = librosa.magphase(librosa.stft(x,win_length=winSize, hop_length=hopSize, n_fft=nFFT))
+	X,_ = librosa.magphase(librosa.stft(audio, win_length=winSize, hop_length=hopSize, n_fft=nFFT))
 
 	#use sub-band energy -> log transformation -> biphasic filtering, if vocal onset detection [1]
 	if source=='vocal':
 		sub_band = [600,2400] #Hz
 		odf = subBandEner(X, fs, sub_band)
 		odf = toDB(odf, 100)
-		odf = biphasicDerivative(odf, hopSize/fs, norm=1, rectify=1)
+		odf = biphasicDerivative(odf, hopSize/fs, norm=True, rectify=True)
 
 		#get onset locations using librosa's peak-picking function
 		onsets = librosa.onset.onset_detect(onset_envelope=odf.copy(), sr=fs, hop_length=hopSize, pre_max=4, post_max=4, pre_avg=6, post_avg=6, wait=50, delta=0.12)*hopSize/fs
@@ -1464,117 +1456,71 @@ def getOnsetActivation(x=None, audioPath=None, startTime=0, duration=None, fs=16
 	#use spectral flux method (from FMP notebooks [2])
 	elif source=='perc':
 		sub_band = [0,fs/2] #full band
-		odf = fmp.spectral_flux(x, Fs=fs, N=nFFT, W=winSize, H=hopSize, M=20, band=sub_band)
+		odf = fmp.spectral_flux(audio, Fs=fs, N=nFFT, W=winSize, H=hopSize, M=20, band=sub_band)
 		onsets = librosa.onset.onset_detect(onset_envelope=odf, sr=fs, hop_length=hopSize, pre_max=1, post_max=1, pre_avg=1, post_avg=1, wait=10, delta=0.05)*hopSize/fs
 
 	return odf, onsets
 	
-def compute_local_average(x, M, Fs=1):
-	"""Compute local average of signal
-
-	Notebook: C6/C6S1_NoveltySpectral.ipynb
-
-	Args:
-		x: Signal
-		M: Determines size (2M+1*Fs) of local average
-		Fs: Sampling rate
-
-	Returns:
-		local_average: Local average signal
-	"""
-	L = len(x)
-	M = int(np.ceil(M * Fs))
-	local_average = np.zeros(L)
-	for m in range(L):
-		a = max(m - M, 0)
-		b = min(m + M + 1, L)
-		local_average[m] = (1 / (2 * M + 1)) * np.sum(x[a:b])
-	return local_average
-
-def spectral_flux_fmp(x, Fs=1, N=1024, W=640, H=80, gamma=100, M=20, norm=1, band=[]):
-	"""Compute spectral-based novelty function
-
-	Notebook: C6/C6S1_NoveltySpectral.ipynb
-
-	Args:
-		x: Signal
-		Fs: Sampling rate
-		N: Window size
-		H: Hope size
-		gamma: Parameter for logarithmic compression
-		M: Size (frames) of local average
-		norm: Apply max norm (if norm==1)
-		band: List of lower and upper spectral freq limits
-
-	Returns:
-		novelty_spectrum: Energy-based novelty function
-		Fs_feature: Feature rate
-	"""
-	X = librosa.stft(x, n_fft=N, hop_length=H, win_length=W, window='hanning')
-	Fs_feature = Fs / H
-	Y = np.log(1 + gamma * np.abs(X))
+def fadeIn(x, length):
+	'''
+	Apply fade-in to the beginning of an audio signal using a hanning window.
 	
-	#if vocal-band SF
-	if len(band)!=0: 
-		band = np.array(band)*(N/2+1)/Fs
-		Y = Y[int(band[0]):int(band[1]),:]
-
-	Y_diff = np.diff(Y)
-	Y_diff[Y_diff < 0] = 0
-	novelty_spectrum = np.sum(Y_diff, axis=0)
-	novelty_spectrum = np.concatenate((novelty_spectrum, np.array([0.0])))
-	if M > 0:
-		local_average = compute_local_average(novelty_spectrum, M)
-		novelty_spectrum = novelty_spectrum - local_average
-		novelty_spectrum[novelty_spectrum < 0] = 0.0
-	if norm == 1:
-		max_value = max(novelty_spectrum)
-		if max_value > 0:
-			novelty_spectrum = novelty_spectrum / max_value
-	return novelty_spectrum
-
-def fadeIn(x,length):
-	"""
-	Apply fade-in to the beginning of an audio signal using a hanning window
+	Parameters
+	----------
+		x   : ndarray
+			Signal
+		length  : int
+			Length of fade (in samples)
 	
-	Parameters:
-	x: signal
-	length: length of fade
-	
-	Returns:
-	faded-in signal
-	"""
-	x[:length] *= np.hanning(2*length)[:length]
+	Returns
+	----------
+		x   : ndarray
+			Faded-in signal
+	'''
+	x[:length] *= (np.hanning(2*length))[:length]
 	return x
 
-def fadeOut(x,length):
-	"""
-	Apply fade-out to the end of an audio signal using a hanning window
+def fadeOut(x, length):
+	'''
+	Apply fade-out to the end of an audio signal using a hanning window.
 	
-	Parameters:
-	x: signal
-	length: length of fade
+	Parameters
+	----------
+		x   : ndarray
+			Signal
+		length  : int
+			Length of fade (in samples)
 	
-	Returns:
-	faded-out signal
-	"""
+	Returns
+	----------
+		x   : ndarray
+			Faded-out signal
+	'''
 	x[-length:] *= np.hanning(2*length)[length:]
 	return x
 
 def autoCorrelationFunction(x, fs, maxLag, winSize, hopSize):
-	"""
-	Compute short-time autocorrelation of a signal and normalise every frame by the maximum correlation value
+	'''
+	Compute short-time autocorrelation of a signal and normalise every frame by the maximum correlation value.
 	
-	Parameters:
-	x: input signal
-	fs: sampling rate
-	maxLag: maximum lag/shift in seconds upto which correlation is to be found (ACF is computed for every single sample shift value lesser than this limit)
-	winSize: length in seconds of the signal selected for short-time autocorrelation
-	hopSize: hop duration in seconds between successive windowed signal segments (not the same as lag/shift)
+	Parameters
+	----------
+		x   : ndarray
+			Input signal
+		fs  : int or float
+			Sampling rate
+		maxLag  : int or float
+			Maximum lag in seconds upto which correlation is to be found (ACF is computed for all unit sample shift values lesser than this limit)
+		winSize : int or float
+			Length in seconds of the signal selected for short-time autocorrelation
+		hopSize : int or float
+			Hop duration in seconds between successive windowed signal segments (not the same as lag/shift)
 	
-	Returns:
-	short-time ACF matrix of dim: (#frames, #lags)
-	"""
+	Returns
+	----------
+		ACF : ndarray
+			short-time ACF matrix [shape=(#frames,#lags)]
+	'''
 
 	#convert parameters to frames from seconds
 	n_ACF_lag = int(maxLag*fs)
@@ -1599,35 +1545,46 @@ def autoCorrelationFunction(x, fs, maxLag, winSize, hopSize):
 	return ACF
 
 def subsequences(x, winSize, hopSize):
-	"""
-	Split signal into shorter windowed segments with a specified hop between consecutive windows
+	'''
+	Split signal into shorter windowed segments with a specified hop between consecutive windows.
 	
-	Parameters:
-	x: input signal
-	winSize: size of short-time window in seconds
-	hopSize: hop duration in seconds between consecutive windows
+	Parameters
+	----------
+		x   : ndarray
+			Input signal
+		winSize : int or float
+			Size of short-time window in seconds
+		hopSize : int or float
+			Hop duration in seconds between consecutive windows
 	
-	Returns:
-	numpy array containing windowed segments
-	"""
+	Returns
+	----------
+		x_sub   : ndarray
+			2d array containing windowed segments
+	'''
 
-	#calculate shape of output numpy array (#rows based on #windows obtained using provided window and hop sizes)
+	#pre-calculate shape of output numpy array (#rows based on #windows obtained using provided window and hop sizes)
 	shape = (int(1 + (len(x) - winSize)/hopSize), winSize)
 
 	strides = (hopSize*x.strides[0], x.strides[0])
-	return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
+	x_sub = np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
+	return x_sub
 
-def tempoPeriodLikelihood(ACF, norm=1):
-	"""
-	Compute from ACF, the likelihood of each ACF lag being the time-period of the tempo. Likelihood is obtained by taking a dot product between the ACF vector and a comb-filter (see [3] for details)
+def tempoPeriodLikelihood(ACF, norm=True):
+	'''
+	Compute from ACF, the likelihood of each ACF lag being the time-period of the tempo. Likelihood is obtained by taking a dot product between the ACF vector and a comb-filter (see [3] for details) in each time frame.
 	
-	Parameters:
-	ACF: acf matrix of a signal
-	norm: 
-	
-	Returns:
-	2d np array (of same dim as input acf matrix) with a likelihood value for each candidate lag in each time frame
-	"""
+	Parameters
+	----------
+		ACF : ndarray
+			Short-time ACF matrix of a signal
+		norm    : bool
+
+	Returns
+	----------
+		tempo_period_candidates : ndarray
+			2d array with a likelihood value for each lag in each time frame
+	'''
 	L = np.shape(ACF)[1]
 	N_peaks = 11 # ?
 
@@ -1637,7 +1594,7 @@ def tempoPeriodLikelihood(ACF, norm=1):
 		D = np.concatenate((C, C+1, C-1, C+2, C-2, C+3, C-3))
 		D = D[D<L]
 		norm_factor = len(D)
-		if norm == 1:
+		if norm:
 			window[j][D] = 1.0/norm_factor
 		else:
 			window[j][D] = 1.0
@@ -1646,48 +1603,64 @@ def tempoPeriodLikelihood(ACF, norm=1):
 	return tempo_period_candidates
 
 def viterbiSmoothing(tempoPeriodLikelihood, hopDur, transitionPenalty, tempoRange=(30,100)):
-	"""
-	Apply viterbi smoothing on tempo period (lag) likelihood values to find optimum sequence of tempo values across audio frames (based on [3])
+	'''
+	Apply viterbi smoothing on tempo period (lag) likelihood values to find optimum sequence of tempo values across audio frames (based on [3]).
 	
-	Parameters:
-	tempoPeriodLikelihood: matrix of likelihood values at each tempo period (lag)
-	hopDur: short-time analysis hop duration in seconds between samples of ACF vector (not hop duration between windowed signal segments taken for ACF)
-	transitionPenalty: multiplicative factor applied to magnitude of change in tempo between frames; high value penalises larger jumps more, suitable for metric tempo that changes gradually across a concert and not abruptly
-	tempoRange: tuple of expected min and max tempo in BPM
-	"""
+	Parameters
+	----------
+		tempoPeriodLikelihood   : ndarray
+			Likelihood values at each lag (tempo period)
+		hopDur  : int or float
+			Short-time analysis hop duration in seconds between samples of ACF vector (not hop duration between windowed signal segments taken for ACF)
+		transitionPenalty   : int or float
+			Penalty factor multiplied with the magnitude of tempo change between frames; high value penalises larger jumps more, suitable for metric tempo that changes gradually across a concert and not abruptly
+		tempoRange  : tuple or list
+			Expected min and max tempo in BPM
+
+	Returns
+	----------
+		tempo_period_smoothed   : ndarray
+			Array of chosen tempo period in each time frame
+	'''
 
 	#convert tempo range to tempo period (in frames) range
 	fs = 1/hopDur
-	tempoRange *= (fs/60)
+	tempoRange = np.around(np.array(tempoRange)*(fs/60)).astype(int)
 
 	#initialise cost matrix with very high values
 	T,L = np.shape(tempoPeriodLikelihood)
-	cost = np.ones((T,L//2))*1e8
+	cost = np.ones((T,L))*1e8
 
-	#
-	m = np.zeros((T,L//2))
+	#matrix to store cost-minimizing lag in previous frame to each lag in current time frame
+	m = np.zeros((T,L))
 
 	#compute cost value at each lag (within range), at each time frame
+	#loop over time frames
 	for i in range(1,T):
-		for j in range(1,L//2):
-			cost[i][j]=cost[i-1][1]+transitionPenalty*abs(60.0*fs/j-60.0*fs)-tempoPeriodLikelihood[i][j]
-			for k in range(2,L//2):
+		#loop over lags in current time frame
+		for j in range(*tempoRange):
+			#loop over lags in prev time frame
+			for k in range(*tempoRange):
 				if cost[i][j]>cost[i-1][k]+transitionPenalty*abs(60.0*fs/j-60.0*fs/k)-tempoPeriodLikelihood[i][j]:
+					#choose lag 'k' in prev time frame that minimizes cost at lag 'j' in current time frame 
 					cost[i][j]=cost[i-1][k]+transitionPenalty*abs(60.0*fs/j-60.0*fs/k)-tempoPeriodLikelihood[i][j]
 					m[i][j]=int(k)
-					
-	tempo_period_smoothed=np.zeros(T)
-	tempo_period_smoothed[T-1]=np.argmin(cost[T-1,1:])/float(fs)
-	t=int(m[T-1, np.argmin(cost[T-1,1:])])
-	i=T-2
+
+	#determine least cost path - start at the last frame (pick lag with minimum cost)
+	tempo_period_smoothed = np.zeros(T)
+	tempo_period_smoothed[T-1] = np.argmin(cost[T-1,:])/float(fs)
+	t = int(m[T-1,np.argmin(cost[T-1,:])])
+
+	#loop in reverse till the first frame, reading off values in 'm[i][j]'
+	i = T-2
 	while(i>=0):
 		tempo_period_smoothed[i]=t/float(fs)
 		t=int(m[i][t])
 		i=i-1
 	return tempo_period_smoothed
-
+	
 # COMPUTATION FUNCTION
-def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, timeStep=0.01, ax=None, **kwargs): 
+def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, timeStep=0.01, ax=None, **kwargs):
 	'''Calculates the intensity contour for an audio clip.
 
 	Intensity contour is generated for a given audio with [#]_ and it's Python API _[#]. 
@@ -1715,27 +1688,29 @@ def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration
 
 			Sent to `librosa.load()` as `path` parameter.
 
-		startTime	: float; default=0
+			Used only if audio is None.
+
+		startTime    : float; default=0
 			Time stamp to consider audio from
 
-		duration	: float or None; default=None
+		duration    : float or None; default=None
 			If duration is None
 				- If `audio` is None, duration is inferred from the audio.
 				- If `audio` is None and `audioPath` is not None, the entire song is loaded.
 
-		minPitch	: float; default=98
+		minPitch    : float; default=98
 			Minimum pitch (in Hz) to read for contour extraction.
 
 			Passed as `minimum_pitch` parameter to `parselmouth.Sound.to_intensity()`.
 
-		timeStep	: float; default=0.01
+		timeStep    : float; default=0.01
 			Time steps (in seconds) in which pitch values are extracted.::
 
 				Example: timeStep = 0.01 implies that pitch values are extracted for every 0.01 s.
 
 			Passed as `time_step` parameter to `parselmouth.Sound.to_intensity()`.
 
-		ax	: matplotlib.axes.Axes or None
+		ax    : matplotlib.axes.Axes or None
 			Axes object to plot the intensity contour in.
 
 			If None, will return a tuple with (intensity contour, time steps)
@@ -1747,7 +1722,7 @@ def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration
 		ax : matplotlib.axes.Axes
 			Plot of intensity contour if `ax` was not None
 
-		(intensityvals, timevals)	: (ndarray, ndarray)
+		(intensityvals, timevals)    : (ndarray, ndarray)
 			Tuple with arrays of intensity values (in dB) and time stamps. Returned if ax was None.
 	
 	'''
@@ -1772,52 +1747,54 @@ def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration
 def plotIntensity(intensity_vals=None, time_vals=None, ax=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, xlabel=True, ylabel=True, title='Intensity Contour', annotate=False, ylim=None, c='yellow', **kwargs):
 	'''Function to plot a computed intensity contour from `intensityContour()` function. 
 
-	Parameters:
-		intensity_vals	: ndarray
+	Parameters
+	----------
+		intensity_vals    : ndarray
 			Intensity contour from `intensityContour()`
 
-		time_vals	: ndarray or None
+		time_vals    : ndarray or None
 			Time steps corresponding to the `intensity_vals` from `intensityContour`
 
 			If None, assumes a time step of 0.01 s
 		
-		ax	: matplotlib.axes.Axes or None
+		ax    : matplotlib.axes.Axes or None
 			Object on which intensity contour is to be plotted
 
 			If None, will plot in `matplotlib.pyplot.gca()`.
 
-		startTime	: float >= 0
+		startTime    : float >= 0
 			Offset time (in seconds) from where audio is analysed.
 
 			Sent to `drawAnnotation()`.
 
-		duration	: float >= 0 or None
+		duration    : float >= 0 or None
 			Duration of audio in the plot.
 
 			If None, will consider the entire audio.
 
 			Sent to `drawAnnotation()`.
 
-		freqXlabels	: int
+		freqXlabels    : int
 			Time (in seconds) after which each x ticklabel should occur
 
-		annotate	: bool
+		annotate    : bool
 			If true will mark annotations provided in the plot.
 
 			Send to `drawAnnotation()`.
 
-		ylim	: (float, float) or None
+		ylim    : (float, float) or None
 			(min, max) limits for the y axis.
 			
 			If None, will be directly interpreted from the data.
 
 		c	: color
-			Colour of the plot
+			Specifies the colour of the plotted intensity contour.
 
-		kwargs	: Additional arguements passed to `drawAnnotation()` is `annotate` is True.
+		kwargs	: Additional arguements passed to `drawAnnotation()` if `annotate` is True.
+
 	Returns
 	-------
-		ax	: matplotlib.axes.Axes
+		ax    : matplotlib.axes.Axes
 			Plot of intensity contour.
 
 	Raises
@@ -1838,7 +1815,7 @@ def plotIntensity(intensity_vals=None, time_vals=None, ax=None, startTime=0, dur
 	ax = __check_axes(ax)
 	
 	ax = sns.lineplot(x=time_vals, y=intensity_vals, ax=ax, color=c);
-	ax.set(xlabel='Time Stamp (s)' if xlabel else '', 
+	ax.set(xlabel='Time (s)' if xlabel else '', 
 	ylabel='Intensity (dB)' if ylabel else '', 
 	title=title, 
 	xlim=(startTime, duration+startTime), 
@@ -1861,68 +1838,67 @@ def plot_hand(annotationFile=None, startTime=0, duration=None, vidFps=25, ax=Non
 	
 	Parameters
 	----------
-		annotationFile	: str
+		annotationFile    : str
 			File path to Openpose annotations.
 
-		startTime	: float
+		startTime    : float
 			Start time for x labels in the plot (time stamp with respect to the audio signal).
 
-		duration	: float
+		duration    : float
 			Duration of audio to consider for the plot.
 			
-		vidFps	: float
+		vidFps    : float
 			FPS of the video data used in openpose annotation.
 
-		ax	: matplotlib.axes.Axes or None 
+		ax    : matplotlib.axes.Axes or None 
 		Axes object on which plot is to be plotted.
 
 		If None, uses the current Axes object in use with `plt.gca()`. 
 
-		freqXlabels	: int > 0 
+		freqXlabels    : int > 0 
 			Time (in seconds) after which each x ticklabel occurs
 
-		xticks	: bool
+		xticks    : bool
 			If True, will add xticklabels to plot.
 
-		yticks	: bool
+		yticks    : bool
 			If True, will add yticklabels to plot.
 
-		xlabel	: bool
+		xlabel    : bool
 			If True, will print xlabel in the plot.
 
-		ylabel	: bool
+		ylabel    : bool
 			If True will print ylabel in the plot.
 
-		title	: str
+		title    : str
 			Title to add to the plot.
 
-		videoOffset	: float
+		videoOffset    : float
 			Number of seconds offset between video and audio::
 				time in audio + videioOffset = time in video
 
-		lWristCol	: str
+		lWristCol    : str
 			Name of the column with left wrist data in `annotationFile`.
 
-		rWristCol	: str
+		rWristCol    : str
 			Name of the column with right wrist data in `annotationFile`.
 
-		wristAxis	: str
+		wristAxis    : str
 			Level 2 header in the `annotationFile` denoting axis along which movement is plotted (x, y or z axes).
 
-		annotate	: bool
+		annotate    : bool
 			If True will mark annotations provided on the plot.
 
-		ylim	: (float, float) or None
+		ylim    : (float, float) or None
 			(min, max) limits for the y axis.
 			
 			If None, will be directly interpreted from the data.
 
-		kwargs	: 
-			Additional arguements passed to `drawAnnotation()`
+		kwargs	: Additional arguements passed to `drawAnnotation()` if `annotate` is True.
 		
 	Returns
 	-------
-		ax	: matplotlib.axes.Axes
+		ax    : matplotlib.axes.Axes
 			Axes object with plot
 
 	'''
@@ -1937,20 +1913,20 @@ def plot_hand(annotationFile=None, startTime=0, duration=None, vidFps=25, ax=Non
 	ax = __check_axes(ax)
 	ax.plot(xvals, lWrist, label='Left Wrist')
 	ax.plot(xvals, rWrist, label='Right Wrist')
-	ax.set(xlabel='Time Stamp (s)' if xlabel else '', 
+	ax.set(xlabel='Time (s)' if xlabel else '', 
 	ylabel='Wrist Position' if ylabel else '', 
 	title=title, 
 	xlim=(startTime, startTime+duration), 
 	xticks=np.around(np.arange(math.ceil(startTime), math.floor(startTime+duration), freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
-	xticklabels=np.around(np.arange(math.ceil(startTime), math.floor(startTime+duration), freqXlabels)).astype(int) if xticks else [], 	# let the labels start from the integer values.freqXLabels) )if xticks else [],
+	xticklabels=np.around(np.arange(math.ceil(startTime), math.floor(startTime+duration), freqXlabels)).astype(int) if xticks else [], 	# let the labels start from the integer values
 	ylim=ylim if ylim is not None else ax.get_ylim()
 	)
 	if not yticks:
 		ax.set(yticklabels=[])
-	ax.invert_yaxis()	# inverst y-axis to simulate the height of the wrist that we see in real time
+	ax.invert_yaxis()    # inverst y-axis to simulate the height of the wrist that we see in real time
 	ax.legend()
 	if annotate:
-		ax = drawAnnotation(startTime=startTime, duration=duration, ax=ax, **kwargs)
+		ax = drawAnnotation(startTime=startTime-vidOffset, duration=duration, ax=ax, **kwargs)
 	return ax
 
 # ANNOTATION FUNCTION
@@ -1961,30 +1937,30 @@ def annotateInteraction(axs, keywords, cs, interactionFile, startTime, duration)
 
 	Parameters
 	----------
-		axs	: list of matplotlib.axes.Axes objects
+		axs    : list of matplotlib.axes.Axes objects
 			List of axs to add annotation to.
 
-		keywords	: list
+		keywords    : list
 			Keyword corresponding to each Axes object. Value appearing in the 'Type' column in `interactionFile`. 
 			
 			..note::
 				If len(keywords) = len(axs) + 1, the last keyword is plotted in all Axes objects passed.
 
-		cs	: list 
+		cs    : list 
 			List of colours associated with each keyword.
 
-		interactionFile	: str
+		interactionFile    : str
 			Path to csv file with the annotation of the interactions.
 
-		startTime	: float >= 0
+		startTime    : float >= 0
 			Time to start reading the audio.
 
-		duration	: float >= 0 
+		duration    : float >= 0 
 			Length of audio to consider
 
 	Returns
 	-------
-		axs	: matplotlib.axes.Axes
+		axs    : matplotlib.axes.Axes
 			List of axes with annotation of interaction
 	'''
 
@@ -1994,6 +1970,7 @@ def annotateInteraction(axs, keywords, cs, interactionFile, startTime, duration)
 								((annotations['End Time'] >= startTime) & (annotations['End Time'] <= startTime+duration))
 								]
 	for i, keyword in enumerate(keywords):
+		lims = axs[i].get_ylim()
 		if i < len(axs):
 			# keyword corresponds to a particular axis
 			for j, annotation in annotations.loc[annotations['Type'] == keyword].iterrows():
@@ -2003,9 +1980,10 @@ def annotateInteraction(axs, keywords, cs, interactionFile, startTime, duration)
 		else:
 			# keyword corresponds to all axes
 			for ax in axs:
-				for j, annotation in annotations.loc[annotations['Type'] == keyword].iterrows():
-					ax.annotate('', xy=(annotation['Start Time'], 0.75*(lims[1] - lims[0]) + lims[0]), xytext=(annotation['End Time'], 0.75*(lims[1] - lims[0]) + lims[0]), arrowprops={'headlength': 0.4, 'headwidth': 0.2, 'width': 3, 'ec':cs[i], 'fc': cs[i]})
-					ax.annotate(annotation['Label'], (annotation['Start Time'] + annotation['Duration']/2, 0.8*(lims[1] - lims[0]) + lims[0]), ha='center') 
+				for _, annotation in annotations.loc[annotations['Type'] == keyword].iterrows():
+					for j, annotation in annotations.loc[annotations['Type'] == keyword].iterrows():
+						ax.annotate('', xy=(annotation['Start Time'], 0.75*(lims[1] - lims[0]) + lims[0]), xytext=(annotation['End Time'], 0.75*(lims[1] - lims[0]) + lims[0]), arrowprops={'headlength': 0.4, 'headwidth': 0.2, 'width': 3, 'ec':cs[i], 'fc': cs[i]})
+						ax.annotate(annotation['Label'], (annotation['Start Time'] + annotation['Duration']/2, 0.8*(lims[1] - lims[0]) + lims[0]), ha='center')  
 	return axs
 
 def drawHandTap(ax, handTaps, c='purple'):
@@ -2015,15 +1993,15 @@ def drawHandTap(ax, handTaps, c='purple'):
 	
 	Parameters
 	----------
-		ax	: matplotlib.axes.Axes or None
+		ax    : matplotlib.axes.Axes or None
 			Axes object to add hand taps to
 
 			If None, will plot on `plt.gca()`.
 
-		handTaps	: ndarray
+		handTaps    : ndarray
 			Array of hand tap timestamps.
 
-		c	: color
+		c    : color
 			Color of the line
 
 			Passed to `plt.axes.Axes.axvline()`.
@@ -2045,26 +2023,26 @@ def generateVideoWSquares(vid_path, tapInfo, dest_path='Data/Temp/vidWSquares.mp
 	
 	Parameters
 	----------
-		vid_path	: str
+		vid_path    : str
 			Path to the original video file.
 
-		tapInfo	: list
+		tapInfo    : list
 			List of metadata associated with each handtap.
 			
 			Metadata for each handtap consists of: 
-				- time	: float
+				- time    : float
 					time stamp of hand tap (in seconds).
-				- keyword	: str	
+				- keyword    : str    
 					keyword specifying which hand tap to consider
-				- (pos1, pos2)	: ((float, float), (float, float))
+				- (pos1, pos2)    : ((float, float), (float, float))
 					(x, y) coordinates of opposite corners of the box to be drawn.
-				- color	: (int, int, int)
+				- color    : (int, int, int)
 					tuple with RGB values associated with the colour #TODO: try to add string input also here#
 
-		dest_path	: str
+		dest_path    : str
 			File path to save video with squares.
 
-		vid_size	: (int, int)
+		vid_size    : (int, int)
 			(width, height) of video to generate #TODO : confirm that this is in pixels#
 
 	Returns
@@ -2099,13 +2077,13 @@ def combineAudioVideo(vid_path='Data/Temp/vidWSquares.mp4', audio_path='audioWCl
 
 	Parameters
 	----------
-		vid_path	: str
+		vid_path    : str
 			File path to the video file with squares.
 		
-		audio_path	: str
+		audio_path    : str
 			File path to the audio file with clicks.
 
-		dest_path	: str
+		dest_path    : str
 			File path to store the combined file at.
 
 	Returns
@@ -2132,22 +2110,22 @@ def generateVideo(annotationFile, onsetKeywords, vidPath='Data/Temp/VS_Shree_123
 	
 	Parameters
 	----------
-		annotationFile	: str
+		annotationFile    : str
 			File path to the annotation file with hand tap timestamps
 
-		onsetKeywords	: list
+		onsetKeywords    : list
 			List of column names to read from `annotationFile`.
 
-		vidPath	: str
+		vidPath    : str
 			File path to original video file.
 
-		tempFolder	: str
+		tempFolder    : str
 			File path to temporary directory to store intermediate audio and video files in.
 
-		pos	: list
+		pos    : list
 			list of [pos1, pos2] -> 2 opposite corners of the box for each keyword 
 
-		cs	: list
+		cs    : list
 			list of [R, G, B] colours used for each keyword
 	
 	Returns
