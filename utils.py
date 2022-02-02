@@ -2,7 +2,7 @@ from tkinter import E
 import warnings
 from matplotlib import pyplot as plt
 import matplotlib
-from matplotlib.colors import is_color_like
+from matplotlib.colors import is_color_like, to_rgb
 import pandas as pd
 import numpy as np
 import librosa
@@ -18,7 +18,7 @@ import os
 import cv2
 from collections import defaultdict
 import utils_fmp as fmp
-
+import pdb
 
 #TODO- add audioPath can be None to all docstrings#
 #set seaborn theme parameters for plots
@@ -327,7 +327,7 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword=None, onsetL
 	return ax
 
 # COMPUTATION FUNCTION
-def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, maxPitch=660, tonic=220, timeStep=0.01, octaveJumpCost=0.9, veryAccurate=True, ax=None, **kwargs): 
+def pitchContour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, minPitch=98, maxPitch=660, tonic=None, timeStep=0.01, octaveJumpCost=0.9, veryAccurate=True, ax=None, **kwargs): 
 	'''Returns pitch contour (in cents) for the audio
 
 	Calculates the pitch contour of a given audio sample using autocorrelation method described in _[#]. The implementation of the algorithm is done using [#]_ and it's Python API _[#]. The pitch contour is converted to cents by making the tonic correspond to 0 cents.
@@ -357,12 +357,14 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
 
 			If audio is None and audioPath is not None, defines sample rate to load the audio at.
 
-		audioPath	: str, int, pathlib.Path or file-like object
+		audioPath	: str, int, pathlib.Path, file-like object or None
 			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
 			Sent to `librosa.load()` as `path`. 
+
+			If None, `audio` cannot be None.
 
 		startTime	: float; default=0
 			Time stamp to consider audio from.
@@ -384,10 +386,10 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
 
 			Passed as `pitch_ceil` parameter to `parselmouth.Sound.to_pitch_ac()`.
 
-		tonic	: float; default=220
-			Tonic of the audio (in Hz).
+		tonic	: float or None
+			Tonic of the audio (in Hz). Used to compute the pitch contour in cents. If float is given, returns pitch contour values in cents.
 
-			Used to compute the pitch contour in cents.
+			If None, returns pitch contour in Hz.
 
 		timeStep	: float; default=0.01
 			Time steps (in seconds) in which pitch values are extracted.::
@@ -416,11 +418,6 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
 
 		(pitchvals, timevals)	: (ndarray, ndarray)
 			Tuple with arrays of pitch values (in cents) and time stamps. Returned if ax was None.
-
-	Raises
-	------
-		ValueError
-			If `tonic` is None.
 	'''
 	
 	if audio is None:
@@ -438,18 +435,21 @@ def pitchCountour(audio=None, sr=16000, audioPath=None, startTime=0, duration=No
 
 	pitchvals = pitch.selected_array['frequency']
 	pitchvals[pitchvals==0] = np.nan    # mark unvoiced regions as np.nan
-	if tonic is None:   raise ValueError('No tonic provided')
-	pitchvals[~(np.isnan(pitchvals))] = 1200*np.log2(pitchvals[~(np.isnan(pitchvals))]/tonic)    # convert Hz to cents
+	if tonic is not None:   
+		pitchvals[~(np.isnan(pitchvals))] = 1200*np.log2(pitchvals[~(np.isnan(pitchvals))]/tonic)    # convert Hz to cents
+		is_cents = True 	# boolean is True if pitchvals is in cents
+	else:
+		is_cents = False 	# boolean is False if pitchvals is in Hz
 	timevals = pitch.xs() + startTime
 	if ax is None:
-		warnings.warn('`ax` is None. Returning pitch and time values.')
 		return (pitchvals, timevals)
 	else:
 		# plot the contour
-		return plotPitch(pitchvals, timevals, startTime=startTime, duration=duration, ax=ax, **kwargs)
+		return plotPitch(pitchvals, timevals, is_cents=is_cents, startTime=startTime, duration=duration, ax=ax, **kwargs)
 
+# Nithya: AskRohit - I have made the default values of xticks and xlabel as False and the defaults of yticks and ylabel as True.
 # PLOTTING FUNCTION
-def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, xlabel=True, ylabel=True, title='Pitch Contour (Cents)', annotate=False, ylim=None, c='blue',**kwargs):
+def plotPitch(pitchvals=None, timevals=None, is_cents=False, notes=None, ax=None, startTime=0, duration=None, freqXlabels=5, xticks=False, yticks=True, xlabel=False, ylabel=True, title='Pitch Contour', annotate=False, ylim=None, c='blue',**kwargs):
 	'''Plots the pitch contour
 
 	Plots the pitch contour passed in the `pitchvals` parameter, computed from `pitchContour()`. 
@@ -467,9 +467,14 @@ def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, startTime=0, d
 			If None, assumes time starts from 0 s with 0.01 s hops for each value in `pitchvals`.
 
 			Computed from `pitchContour()`.
+		
+		is_cents	: boolean; default=False
+			If True, indicates that `pitchvals` is in Cents.
 
-		notes	: list
-			list of dictionaries with keys ``cents`` and ``label`` for each note present in the raga of the audio.::
+			If False, indicates that `pitchvals` is in Hertz.
+
+		notes	: list or None
+			list of dictionaries with keys (``cents`` or ``hertz``) and ``label`` for each note present in the raga of the audio. Uses the ``label`` value as a yticklabel in the plot. ::
 
 				Example:
 				notes = [
@@ -487,6 +492,8 @@ def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, startTime=0, d
 					}
 					...
 					] 
+
+				If None, uses the cents/Hz values as the yticklabels.
 
 		ax	: matplotlib.axes.Axes or None
 			Object on which pitch contour is to be plotted
@@ -553,27 +560,36 @@ def plotPitch(pitchvals=None, timevals=None, notes=None, ax=None, startTime=0, d
 	if pitchvals is None:
 		ValueError('No pitch contour provided')
 	if timevals is None:
-		warnings.warn('No time values provided, assuming 0.01 s time steps in pitch contour')
 		timevals = np.arange(startTime, len(pitchvals)*0.01, 0.01)
 	#TODO-Rohit: Added below block -> Nithya- I changed duration to take the difference between the last and first time step
 	if duration is None:
-		warnings.warn('No duration provided, assuming difference between the last and the first time step in pitch contour as duration')
 		duration = timevals[-1] - timevals[0]
 	# if ax is None, use the `plt.gca()` to use current axes object
 	ax = __check_axes(ax)
 	
 	ax = sns.lineplot(x=timevals, y=pitchvals, ax=ax, color=c)
 	ax.set(xlabel='Time (s)' if xlabel else '', 
-	ylabel='Notes' if ylabel else '', 
 	title=title, 
 	xlim=(startTime, startTime+duration), 
 	xticks=np.around(np.arange(math.ceil(startTime), math.floor(startTime+duration), freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
 	xticklabels=np.around(np.arange(math.ceil(startTime), math.floor(startTime+duration), freqXlabels)).astype(int) if xticks else []) 	# let the labels start from the integer values.
+
+	# set ylabel according to `is_cents` variable
+	if is_cents:
+		ax.set(ylabel='Cents' if ylabel else '')
+	else:
+		ax.set(ylabel='Hz' if ylabel else '')
 	if notes is not None and yticks:
-		# add yticks if needed
+		# add notes on the yticklabels if notes is not None
+
+		# keyword in the `notes` parameter to the get the pitch values of each note from
+		if is_cents:
+			notes_keyword = 'cents'
+		else:
+			notes_keyword = 'hertz'
 		ax.set(
-		yticks=[x['cents'] for x in notes if (x['cents'] >= min(pitchvals[~(np.isnan(pitchvals))])) & (x['cents'] <= max(pitchvals[~(np.isnan(pitchvals))]))] if yticks else [], 
-		yticklabels=[x['label'] for x in notes if (x['cents'] >= min(pitchvals[~(np.isnan(pitchvals))])) & (x['cents'] <= max(pitchvals[~(np.isnan(pitchvals))]))] if yticks else [])
+		yticks=[x[notes_keyword] for x in notes if (x[notes_keyword] >= min(pitchvals[~(np.isnan(pitchvals))])) & (x[notes_keyword] <= max(pitchvals[~(np.isnan(pitchvals))]))] if yticks else [], 
+		yticklabels=[x['label'] for x in notes if (x[notes_keyword] >= min(pitchvals[~(np.isnan(pitchvals))])) & (x[notes_keyword] <= max(pitchvals[~(np.isnan(pitchvals))]))] if yticks else [])
 	if ylim is not None:
 		ax.set(ylim=ylim)
 
@@ -604,12 +620,14 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 
 			If audio is None and audioPath is not None, defines sample rate to load the audio at.
 
-		audioPath	: str, int, pathlib.Path or file-like object
+		audioPath	: str, int, pathlib.Path, file-like object or None
 			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
 			Sent to `librosa.load()` as `path` parameter. 
+
+			If None, `audio` cannot be None.
 
 		startTime	: float; default=0
 			Time stamp to consider audio from.
@@ -667,14 +685,13 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 
 	if ax is None:
 		# return f, t, X_dB
-		warnings.warn('`ax` is None. Returning frequency, time and STFT values.')
 		return (f, t, X_dB)
 
 	else:
 		return plotSpectrogram(X_dB, t, f, sr=sr, startTime=startTime, duration=duration, ax=ax, **kwargs)
 
 # PLOTTING FUNCTION
-def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=160, cmap='Blues', ax=None, freqXlabels=5, xticks=True, yticks=True, xlabel=True, ylabel=True, title='Spectrogram', annotate=True, ylim=(0, 5000), **kwargs): 
+def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=160, cmap='Blues', ax=None, freqXlabels=5, xticks=False, yticks=True, xlabel=False, ylabel=True, title='Spectrogram', annotate=True, ylim=(0, 5000), **kwargs): 
 	'''Plots spectrogram
 
 	Uses `librosa.display.specshow()` to plot a spectrogram from a computed STFT. Annotations can be added is `annotate` is True.
@@ -754,8 +771,9 @@ def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=16
 	
 	'''
 	 # TODO-Rohit: for some reason, below line is throwing an error due to x_coords and y_coords; I'm passing o/ps X,t,f from spectrogram function; if x_coords, y_coords not passed then function plots without error; need to debug
-	#specshow(X_dB, x_coords=t, y_coords=f, x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap)
-	specshow(X_dB,x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap)
+	 # Nithya: I am not getting this error, can you tell me what the error says?
+	specshow(X_dB, x_coords=t, y_coords=f, x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap, shading='auto')
+	#specshow(X_dB,x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap)
 
 	# set ylim if required
 	if ylim is None:
@@ -773,7 +791,7 @@ def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=16
 	xticks=np.around(np.arange(math.ceil(startTime), math.floor(startTime+duration), freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
 	xticklabels=np.around(np.arange(math.ceil(startTime), math.floor(startTime+duration), freqXlabels)).astype(int) if xticks else [], 	# let the labels start from the integer values.
 	ylim=ylim,
-	yticks= np.arange(math.ceil(ylim[0]/1000)*1000, math.ceil(ylim[1]/1000)*1000, 2000) if yticks else [], #TODO: try to see if you can make this more general#
+	yticks= np.arange(math.ceil(ylim[0]/1000)*1000, math.ceil(ylim[1]/1000)*1000, 2000) if yticks else [], #TODO-AskRohit: try to see if you can make this more general#
 	yticklabels=[f'{(x/1000).astype(int)}k' for x in np.arange(math.ceil(ylim[0]/1000)*1000, math.ceil(ylim[1]/1000)*1000, 2000)]  if yticks else [])
 
 	if annotate:
@@ -782,7 +800,7 @@ def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=16
 	return ax
 
 # PLOTTING FUNCTION
-def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, yticks=True, xlabel=True, ylabel=True, title='Waveform', freqXlabels=5, annotate=False, odf=False, winSize_odf=640, hopSize_odf=160, nFFT_odf=1024, source_odf='vocal', cOdf='black', ylim=None, **kwargs): 
+def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, yticks=True, xlabel=False, ylabel=True, title='Waveform', freqXlabels=5, annotate=False, odf=False, winSize_odf=640, hopSize_odf=160, nFFT_odf=1024, source_odf='vocal', cOdf='black', ylim=None, **kwargs): 
 	'''Plots the wave plot of the audio
 
 	Plots the waveform of the given audio using `librosa.display.waveshow()`.
@@ -797,12 +815,14 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 
 			If audio is None and audioPath is not None, defines sample rate to load the audio at
 
-		audioPath	: str, int, pathlib.Path or file-like object
+		audioPath	: str, int, pathlib.Path, file-like object or None
 			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
 			Sent to `librosa.load()` as `path` parameter. 
+
+			If None, `audio` cannot be None.
 
 		startTime	: float; default=0
 			Time stamp to consider audio from.
@@ -836,6 +856,9 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 
 		freqXlabels	: float > 0
 			Time (in seconds) after which each x ticklabel occurs in the plot.
+
+		annotate	: boolean
+			If True, will annotate markings in either cyclePath or onsetPath with preference to cyclePath.
 
 		odf	: bool
 			If True, will plot the onset detection function over the wave form.
@@ -892,7 +915,7 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 
 	if odf:
 		plotODF(audio=audio, sr=sr, startTime=0, duration=None, ax=ax, winSize_odf=winSize_odf, hopSize_odf=hopSize_odf, nFFT_odf=nFFT_odf, source_odf=source_odf, cOdf=cOdf, ylim=True) 	# startTime=0 and duration=None because audio is already loaded.
-		#TODO: is plotODF required in other functions #
+		#TODO-AskRohit: is plotODF required in other functions like pitch contour/spectrogram plots #
 
 	# set ylim if required
 	if ylim is None:
@@ -914,7 +937,7 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 	return ax
 
 # PLOTTING FUNCTION
-def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duration=None, ax=None, winSize_odf=640, hopSize_odf=160, nFFT_odf=1024, source_odf='vocal', cOdf='black', updatePlot=False, xlabel=False, ylabel=False, xticks=False, yticks=False, title='Onset Detection Function', freqXlabels=5, ylim=True):
+def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duration=None, ax=None, winSize_odf=640, hopSize_odf=160, nFFT_odf=1024, source_odf='vocal', cOdf='black', updatePlot=False, xlabel=False, ylabel=False, xticks=False, yticks=False, title='Onset Detection Function', freqXlabels=5, ylim=True, annotate=False, **kwargs):
 	#TODO-Rohit: added additional 'odf' parameter; in the spirit of separating our computation and plotting functions, this function should also ideally just plot odf, given odf as a parameter. But for now, I've added odf as a parameter and not removed audio input.
 	'''
 	Plots onset detection function if `ax` is provided. Function comes from `getODF()`.
@@ -931,12 +954,14 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
 
 			If audio is None and audioPath is not None, defines sample rate to load the audio at
 
-		audioPath	: str, int, pathlib.Path or file-like object
+		audioPath	: str, int, pathlib.Path, file-like object or None
 			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
 			Sent to `librosa.load()` as `path` parameter. 
+
+			If None, `audio` cannot be None.
 
 		odf : ndarray
 			Extracted onset detection function, if already available
@@ -1009,6 +1034,11 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
 			
 			If None, will be directly interpreted from the data.
 
+		annotate	: boolean
+			If True, will annotate markings in either cyclePath or onsetPath with preference to cyclePath.
+
+		kwargs	: Additional arguements passed to `drawAnnotation()` if `annotate` is True.
+
 	Returns
 	-------
 		ax	: matplotlib.axes.Axes)
@@ -1060,9 +1090,13 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
 		xticks=xticks_ if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)),
 		xticklabels=xticklabels_ if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)).astype(int),
 		yticks=yticks_ if not yticks else np.around(np.linspace(-max_abs_val,max_abs_val, 3), 2), #TODO-Rohit linspace args edited from min & max(audio)
-		yticklabels=yticklabels_ if not yticks else np.around(np.linspace(-np.max(odf_vals),np.max(odf_vals), 3), 2), #TODO-Rohit linspace args edited from min & max(audio)
+		yticklabels=yticklabels_ if not yticks else np.around(np.linspace(-np.max(odf_vals),np.max(odf_vals), 3), 2), #TODO-Rohit linspace args edited from min & max(audio) - AskRohit: shouldn't the first and second arguement also be -max_abs_val and max_abs_val (like int the previous line) since these are the corresponding label values for the ticks marked in the previous line.
 		ylim= ax.get_ylim() if ylim is not None else (-max_abs_val, max_abs_val),
-		title=title_) 
+		title=title_) #TODO- AskRohit: should the title parameter be removed from this function if it isn't being used?
+
+		# Added by Nithya to add annotations to the plot
+		if annotate:
+			ax = drawAnnotation(startTime=startTime, duration=duration, ax=ax, **kwargs)
 		return ax
 
 # AUDIO MANIPULATION	
@@ -1079,12 +1113,14 @@ def playAudio(audio=None, sr=16000, audioPath=None, startTime=0, duration=None):
 
 			If audio is None and audioPath is not None, defines sample rate to load the audio at.
 
-		audioPath	: str, int, pathlib.Path or file-like object
+		audioPath	: str, int, pathlib.Path, file-like object or None
 			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
 			Sent to `librosa.load()` as `path` parameter.
+
+			If None, `audio` cannot be None.
 
 		startTime	: float; default=0
 			Time stamp to consider audio from.
@@ -1119,12 +1155,14 @@ def playAudioWClicks(audio=None, sr=16000, audioPath=None, startTime=0, duration
 
 			If audio is None and audioPath is not None, defines sample rate to load the audio at.
 
-		audioPath	: str, int, pathlib.Path or file-like object
+		audioPath	: str, int, pathlib.Path, file-like object or None
 			Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
 			Sent to `librosa.load()` as `path` parameter.
+
+			If None, `audio` cannot be None.
 
 		startTime	: float
 			Time stamp to consider audio from.
@@ -1681,14 +1719,14 @@ def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration
 
 			If audio is None and audioPath is not None, defines sample rate to load the audio at
 
-		audioPath	: str, int, pathlib.Path or file-like object
+		audioPath	: str, int, pathlib.Path, file-like object or None
         	Path to the input file.
 
 			Used only if audio is None. Audio is loaded as mono.
 
 			Sent to `librosa.load()` as `path` parameter.
 
-			Used only if audio is None.
+			If None, `audio` cannot be None.
 
 		startTime    : float; default=0
 			Time stamp to consider audio from
@@ -1744,7 +1782,7 @@ def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration
 		return plotIntensity(intensity_vals=intensity_vals, time_vals=time_vals, ax=ax, startTime=startTime, duration=duration, **kwargs)
 
 # PLOTTING FUNCTION
-def plotIntensity(intensity_vals=None, time_vals=None, ax=None, startTime=0, duration=None, freqXlabels=5, xticks=True, yticks=True, xlabel=True, ylabel=True, title='Intensity Contour', annotate=False, ylim=None, c='yellow', **kwargs):
+def plotIntensity(intensity_vals=None, time_vals=None, ax=None, startTime=0, duration=None, freqXlabels=5, xticks=False, yticks=True, xlabel=False, ylabel=True, title='Intensity Contour', annotate=False, ylim=None, c='yellow', **kwargs):
 	'''Function to plot a computed intensity contour from `intensityContour()` function. 
 
 	Parameters
@@ -1752,11 +1790,9 @@ def plotIntensity(intensity_vals=None, time_vals=None, ax=None, startTime=0, dur
 		intensity_vals    : ndarray
 			Intensity contour from `intensityContour()`
 
-		time_vals    : ndarray or None
+		time_vals    : ndarray
 			Time steps corresponding to the `intensity_vals` from `intensityContour`
 
-			If None, assumes a time step of 0.01 s
-		
 		ax    : matplotlib.axes.Axes or None
 			Object on which intensity contour is to be plotted
 
@@ -1805,11 +1841,6 @@ def plotIntensity(intensity_vals=None, time_vals=None, ax=None, startTime=0, dur
 	'''
 	if intensity_vals is None:
 		Exception('No intensity contour provided')
-
-	if time_vals is None:
-		# if time vals is None, assumes 0.01s time step
-		warnings.warn('No time values provided, assuming 0.01 s time steps in intensity contour')
-		timevals = np.arange(startTime, len(intensity_vals)*0.01, 0.01)
 	
 	# check if ax is None
 	ax = __check_axes(ax)
@@ -1829,7 +1860,7 @@ def plotIntensity(intensity_vals=None, time_vals=None, ax=None, startTime=0, dur
 	return ax
 
 # PLOTTING FUNCTION
-def plot_hand(annotationFile=None, startTime=0, duration=None, vidFps=25, ax=None, freqXlabels=5, xticks=False, yticks=False, xlabel=True, ylabel=True, title='Wrist Position Vs. Time', vidOffset=0, lWristCol='LWrist', rWristCol='RWrist', wristAxis='y', annotate=False, ylim=None, **kwargs):
+def plot_hand(annotationFile=None, startTime=0, duration=None, vidFps=25, ax=None, freqXlabels=5, xticks=False, yticks=False, xlabel=False, ylabel=True, title='Wrist Position Vs. Time', vidOffset=0, lWristCol='LWrist', rWristCol='RWrist', wristAxis='y', annotate=False, ylim=None, **kwargs):
 	'''Function to plot hand movement.
 
 	Using Openpose annotations, this function plots the height of each hand's wrist vs time. 
@@ -2036,15 +2067,14 @@ def generateVideoWSquares(vid_path, tapInfo, dest_path='Data/Temp/vidWSquares.mp
 					keyword specifying which hand tap to consider
 				- (pos1, pos2)    : ((float, float), (float, float))
 					(x, y) coordinates of opposite corners of the box to be drawn.
-				- color    : (int, int, int)
-					tuple with RGB values associated with the colour #TODO: try to add string input also here#
+				- color    : (int, int, int) or color
+					If ``(int, int, int)`` then it is a tuple with RGB values associated with the colour.
 
 		dest_path    : str
 			File path to save video with squares.
 
 		vid_size    : (int, int)
-			(width, height) of video to generate #TODO : confirm that this is in pixels#
-
+			(width, height) of video to generate in pixels
 	Returns
 		None
 	'''
@@ -2052,7 +2082,12 @@ def generateVideoWSquares(vid_path, tapInfo, dest_path='Data/Temp/vidWSquares.mp
 	cap_vid = cv2.VideoCapture(vid_path)
 	fps = cap_vid.get(cv2.CAP_PROP_FPS)
 	framesToDraw = defaultdict(list)   # dictionary with frame numbers as keys and properties of square box to draw as list of values
-	for timeRow in tapInfo:
+	for ind, timeRow in enumerate(tapInfo):
+		if is_color_like(timeRow[3]):
+			# pdb.set_trace()
+			tapInfo[ind][3] = [int(x*255) for x in list(to_rgb(timeRow[3]))]
+		# converts data from RGB to BGR
+		tapInfo[ind][3] = tuple([int(x) for x in timeRow[3]][::-1])
 		framesToDraw[int(np.around(timeRow[0]*fps))] = timeRow[1:]
 	output = cv2.VideoWriter(dest_path, cv2.VideoWriter_fourcc(*"XVID"), fps, vid_size)
 	i = 0
@@ -2062,7 +2097,7 @@ def generateVideoWSquares(vid_path, tapInfo, dest_path='Data/Temp/vidWSquares.mp
 		if ret == True:
 			i+=1
 			if i in framesToDraw.keys():
-				frame = cv2.rectangle(frame, framesToDraw[i][1][0], framesToDraw[i][1][1], tuple([int(x) for x in framesToDraw[i][2]][::-1]), 3)    # converting color from BGR to RGB
+				frame = cv2.rectangle(frame, framesToDraw[i][1][0], framesToDraw[i][1][1], framesToDraw[i][2], 3)
 			output.write(frame)
 		else:
 			# all frames are read
@@ -2139,7 +2174,7 @@ def generateVideo(annotationFile, onsetKeywords, vidPath='Data/Temp/VS_Shree_123
 	timeStamps.sort(key=lambda x: x[0])
 
 	# generate video 
-	generateVideoWSquares(vid_path=vidPath, timeStamps=timeStamps, dest_path=os.path.join(tempFolder, 'vidWSquares.mp4'))
+	generateVideoWSquares(vid_path=vidPath, tapInfo=timeStamps, dest_path=os.path.join(tempFolder, 'vidWSquares.mp4'))
 
 	# generate audio
 	playAudioWClicks(audioPath=vidPath, onsetFile=annotationFile, onsetLabels=onsetKeywords, destPath=os.path.join(tempFolder, 'audioWClicks.wav'))
