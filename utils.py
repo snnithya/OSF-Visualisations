@@ -20,7 +20,7 @@ from collections import defaultdict
 import utils_fmp as fmp
 import pdb
 
-#TODO- add audioPath can be None to all docstrings#
+#TODO- add audioPath can be None to all docstrings# #Resolved
 #set seaborn theme parameters for plots
 sns.set_theme(rc={"xtick.bottom" : True, "ytick.left" : False, "xtick.major.size":4, "xtick.minor.size":2, "ytick.major.size":4, "ytick.minor.size":2, "xtick.labelsize": 10, "ytick.labelsize": 10})
 
@@ -561,7 +561,7 @@ def plotPitch(pitchvals=None, timevals=None, is_cents=False, notes=None, ax=None
 		ValueError('No pitch contour provided')
 	if timevals is None:
 		timevals = np.arange(startTime, len(pitchvals)*0.01, 0.01)
-	#TODO-Rohit: Added below block -> Nithya- I changed duration to take the difference between the last and first time step
+	#TODO-Rohit: Added below block -> Nithya- I changed duration to take the difference between the last and first time step #Resolved
 	if duration is None:
 		duration = timevals[-1] - timevals[0]
 	# if ax is None, use the `plt.gca()` to use current axes object
@@ -576,9 +576,9 @@ def plotPitch(pitchvals=None, timevals=None, is_cents=False, notes=None, ax=None
 
 	# set ylabel according to `is_cents` variable
 	if is_cents:
-		ax.set(ylabel='Cents' if ylabel else '')
+		ax.set(ylabel='Pitch (Cents)' if ylabel else '')
 	else:
-		ax.set(ylabel='Hz' if ylabel else '')
+		ax.set(ylabel='Pitch (Hz)' if ylabel else '')
 	if notes is not None and yticks:
 		# add notes on the yticklabels if notes is not None
 
@@ -673,7 +673,7 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 	if audio is None:
 		audio, sr = librosa.load(audioPath, sr=sr, mono=True, offset=startTime, duration=duration)
 	if duration is None:
-		duration = librosa.get_duration(audio, sr=sr) 	
+		duration = librosa.get_duration(audio, sr=sr)
 	
 	if nFFT is None:
 		nFFT = int(2**np.ceil(np.log2(winSize)))     # set value of `nFFT` if it is None.
@@ -770,8 +770,8 @@ def plotSpectrogram(X_dB, t, f, sr=16000, startTime=0, duration=None, hopSize=16
 	kwargs	: Additional arguements provided to `drawAnnotation()` if `annotate` is True.
 	
 	'''
-	 # TODO-Rohit: for some reason, below line is throwing an error due to x_coords and y_coords; I'm passing o/ps X,t,f from spectrogram function; if x_coords, y_coords not passed then function plots without error; need to debug
-	 # Nithya: I am not getting this error, can you tell me what the error says?
+	 #Resolved # TODO-Rohit: for some reason, below line is throwing an error due to x_coords and y_coords; I'm passing o/ps X,t,f from spectrogram function; if x_coords, y_coords not passed then function plots without error; need to debug
+	 # Nithya: I am not getting this error, can you tell me what the error says? 
 	specshow(X_dB, x_coords=t, y_coords=f, x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap, shading='auto')
 	#specshow(X_dB,x_axis='time', y_axis='linear', sr=sr, fmax=sr//2, hop_length=hopSize, ax=ax, cmap=cmap)
 
@@ -915,7 +915,7 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 
 	if odf:
 		plotODF(audio=audio, sr=sr, startTime=0, duration=None, ax=ax, winSize_odf=winSize_odf, hopSize_odf=hopSize_odf, nFFT_odf=nFFT_odf, source_odf=source_odf, cOdf=cOdf, ylim=True) 	# startTime=0 and duration=None because audio is already loaded.
-		#TODO-AskRohit: is plotODF required in other functions like pitch contour/spectrogram plots #
+		#Resolved #TODO-AskRohit: is plotODF required in other functions like pitch contour/spectrogram plots #
 
 	# set ylim if required
 	if ylim is None:
@@ -938,7 +938,7 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 
 # PLOTTING FUNCTION
 def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duration=None, ax=None, winSize_odf=640, hopSize_odf=160, nFFT_odf=1024, source_odf='vocal', cOdf='black', updatePlot=False, xlabel=False, ylabel=False, xticks=False, yticks=False, title='Onset Detection Function', freqXlabels=5, ylim=True, annotate=False, **kwargs):
-	#TODO-Rohit: added additional 'odf' parameter; in the spirit of separating our computation and plotting functions, this function should also ideally just plot odf, given odf as a parameter. But for now, I've added odf as a parameter and not removed audio input.
+	#Resolved #TODO-Rohit: added additional 'odf' parameter; in the spirit of separating our computation and plotting functions, this function should also ideally just plot odf, given odf as a parameter. But for now, I've added odf as a parameter and not removed audio input.
 	'''
 	Plots onset detection function if `ax` is provided. Function comes from `getODF()`.
 	
@@ -1063,23 +1063,22 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
 	
 	# set time and odf values in variables
 	time_vals = np.arange(startTime, startTime+duration, hopSize_odf/sr)
-	#TODO-Rohit: changed last argument to hopsize_odf/sr because hopsize_odf is in frames now 
+	#Resolved #TODO-Rohit: changed last argument to hopsize_odf/sr because hopsize_odf is in frames now 
 	
-	#odf_vals = odf_vals[:-1]    # disregard the last frame of odf_vals since it is centered around the frame at time stamp `startTime`` + `duration``
-	# TODO-Rohit: not sure above line is necessary. I got length mismatch errors so commented it. We could instead add code to make lengths same like below:
-	# odf_vals = odf_vals[: min((len(time_vals), len(time_vals)))]
-	# time_vals = time_vals[: min((len(time_vals), len(time_vals)))]
+	#Resolved # TODO-Rohit: not sure above line is necessary. I got length mismatch errors so commented it. We could instead add code to make lengths same like below:
+	odf_vals = odf_vals[: min((len(time_vals), len(time_vals)))]
+	time_vals = time_vals[: min((len(time_vals), len(time_vals)))]
 
 
 	if ax is None:
 		# if ax is None, return (odf_vals, time_vals)
 		return (odf_vals, time_vals)
 	else:
-		#TODO-Rohit added below 'if updatePlot' block to retain existing ax properties in case odf is being plotted on top of waveform. Can add this block in other plotting functions too
+		#Resolved #TODO-Rohit added below 'if updatePlot' block to retain existing ax properties in case odf is being plotted on top of waveform. Can add this block in other plotting functions too
 		if updatePlot:
 			xticks_, yticks_, xticklabels_, yticklabels_, title_, xlabel_, ylabel_ = ax.get_xticks(), ax.get_yticks(), ax.get_xticklabels(), ax.get_yticklabels(), ax.get_title(), ax.get_xlabel(), ax.get_ylabel()
 		else:
-			xticks_, yticks_, xticklabels_, yticklabels_, title_, xlabel_, ylabel_ = [],[],[],[],'','',''
+			xticks_, yticks_, xticklabels_, yticklabels_, title_, xlabel_, ylabel_ = [],[],[],[],title,'',''
 
 		ax.plot(time_vals, odf_vals, c=cOdf)     # plot odf_vals and consider odf_vals for all values except the last frame
 		max_abs_val = max(abs(odf_vals))   # find maximum value to set y limits to ensure symmetrical plot
@@ -1089,10 +1088,10 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
 		xlim=(0, duration), 
 		xticks=xticks_ if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)),
 		xticklabels=xticklabels_ if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)).astype(int),
-		yticks=yticks_ if not yticks else np.around(np.linspace(-max_abs_val,max_abs_val, 3), 2), #TODO-Rohit linspace args edited from min & max(audio)
-		yticklabels=yticklabels_ if not yticks else np.around(np.linspace(-np.max(odf_vals),np.max(odf_vals), 3), 2), #TODO-Rohit linspace args edited from min & max(audio) - AskRohit: shouldn't the first and second arguement also be -max_abs_val and max_abs_val (like int the previous line) since these are the corresponding label values for the ticks marked in the previous line.
+		yticks=yticks_ if not yticks else np.around(np.linspace(-max_abs_val,max_abs_val, 3), 2), #Resolved #TODO-Rohit linspace args edited from min & max(audio)
+		yticklabels=yticklabels_ if not yticks else np.around(np.linspace(-max_abs_val,max_abs_val, 3), 2), #Resolved #TODO-Rohit linspace args edited from min & max(audio) - AskRohit: shouldn't the first and second arguement also be -max_abs_val and max_abs_val (like int the previous line) since these are the corresponding label values for the ticks marked in the previous line.
 		ylim= ax.get_ylim() if ylim is not None else (-max_abs_val, max_abs_val),
-		title=title_) #TODO- AskRohit: should the title parameter be removed from this function if it isn't being used?
+		title=title_) #Resolved #TODO- AskRohit: should the title parameter be removed from this function if it isn't being used?
 
 		# Added by Nithya to add annotations to the plot
 		if annotate:
@@ -1135,7 +1134,7 @@ def playAudio(audio=None, sr=16000, audioPath=None, startTime=0, duration=None):
 			Object that plays the audio.
 	'''
 	if audio is None:
-		# TODO Nithya: I changed the sr parameter value to sr here (from None). Not sure if I had added the None or not, let me know if you think it should be different
+		#Resolved # TODO Nithya: I changed the sr parameter value to sr here (from None). Not sure if I had added the None or not, let me know if you think it should be different
 		audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
 	return Audio(audio, rate=sr)
 
