@@ -910,7 +910,7 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 		audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
 	if duration is None:
 		duration = librosa.get_duration(audio, sr=sr)
-
+	
 	waveplot(audio, sr, ax=ax)
 
 	if odf:
@@ -1067,8 +1067,8 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
 	
 	#odf_vals = odf_vals[:-1]    # disregard the last frame of odf_vals since it is centered around the frame at time stamp `startTime`` + `duration``
 	# TODO-Rohit: not sure above line is necessary. I got length mismatch errors so commented it. We could instead add code to make lengths same like below:
-	# odf_vals = odf_vals[: min((len(time_vals), len(time_vals)))]
-	# time_vals = time_vals[: min((len(time_vals), len(time_vals)))]
+	odf_vals = odf_vals[: min((len(time_vals), len(odf_vals)))]
+	time_vals = time_vals[: min((len(time_vals), len(odf_vals)))]
 
 
 	if ax is None:
@@ -1098,6 +1098,66 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
 		if annotate:
 			ax = drawAnnotation(startTime=startTime, duration=duration, ax=ax, **kwargs)
 		return ax
+
+def plotEnergy(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax=None, xticks=False, freqXlabels=5, annotate=False, cyclePath=None, numDiv=0, onsetPath=None, cAnnot=['purple'], annotLabel=True, winSize_odf=640, hopSize_odf=160, nFFT_odf=1024, source_odf='vocal', cOdf='black'):
+	'''
+	For debugging puposes only - plots energy function used to calculate odf
+
+	Parameters:
+		audio: loaded audio time series
+		sr: sample rate that audio time series is loaded/ is to be loaded in
+		audioPath: path to the audio file
+		startTime: time to start reading the audio at
+		duration: duration of audio to load
+		ax: axis to plot waveplot in
+		xticks: if True, will plot xticklabels
+		freqXlabels: time (in seconds) after which each x label occurs
+		annotate: if True, will annotate tala markings
+		cyclePath: path to file with tala cycle annotations
+		numDiv: number of divisions to put between each annotation marking
+		onsetPath: path to file with onset annotations; only considered if cyclePath is None
+		cAnnot: colour for the annotation marking
+		annotLabel: if True, will print annotation label along with line; used only if annotate is True; used only if annotate is True
+		odf: if True, will plot the onset detection function over the wave form
+		winSize_odf: window size, fed to the onset detection function; valid only if odf is true
+		hopSize_odf: hop size in seconds, fed to the onset detection function; valid only if odf is true
+		nFFT_odf: size of DFT used in onset detection function; valid only if odf is true
+		source_odf: type of instrument - vocal or pakhawaj, fed to odf; valid only if odf is true
+		cOdf: colour to plot onset detection function in; valid only if odf is true
+	'''
+	if ax is None:
+		Exception('ax parameter has to be provided')
+	startTime = math.floor(startTime)   # set start time to an integer, for better readability on the x axis of the plot
+	if audio is None:
+		audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
+		audio /= np.max(np.abs(audio))
+	if duration is None:
+		duration = librosa.get_duration(audio, sr=sr)
+		duration = math.floor(duration)  # set duration to an integer, for better readability on the x axis of the plot
+		audio = audio[:int(duration*sr)]    # ensure that audio length = duration
+	ax.set(xlabel='' if not xticks else 'Time (s)', 
+	xlim=(0, duration), 
+	xticks=[] if not xticks else np.around(np.arange(0, duration, freqXlabels)),
+	xticklabels=[] if not xticks else np.around(np.arange(startTime, duration+startTime, freqXlabels), 2),
+	title='Energy Contour', 
+	ylabel='dB')
+
+	X,_ = librosa.magphase(librosa.stft(audio, win_length=winSize_odf, hop_length=hopSize_odf, n_fft=nFFT_odf))
+
+	#use sub-band energy -> log transformation -> biphasic filtering, if vocal onset detection [1]
+	if source_odf=='vocal':
+		sub_band = [600,2400] #Hz
+		energy = subBandEner(X, sr, sub_band)
+		energy = toDB(energy, 100)
+
+	#use spectral flux method (from FMP notebooks [2])
+	elif source_odf=='perc':
+		raise Exception('Not implemented')
+	
+	ax.plot(np.arange(0, duration, hopSize_odf/sr), energy[:-1], c=cOdf)
+	if annotate:
+		ax = drawAnnotation(cyclePath=cyclePath, onsetPath=onsetPath, numDiv=numDiv, startTime=startTime, duration=duration, ax=ax, cAnnot=cAnnot, annotLabel=annotLabel)
+	return ax
 
 # AUDIO MANIPULATION	
 def playAudio(audio=None, sr=16000, audioPath=None, startTime=0, duration=None):
