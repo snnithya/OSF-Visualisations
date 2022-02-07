@@ -17,3 +17,4 @@ docs/
 syllableOnsetFuncsExtra.txt
 example notebooks/audios/
 odf.py
+other_utils.py
