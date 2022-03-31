@@ -8,7 +8,7 @@ import numpy as np
 import librosa
 import seaborn as sns
 import scipy.signal as sig
-from librosa.display import waveplot, specshow
+from librosa.display import waveshow, specshow
 from IPython.display import Audio, Video 
 import parselmouth
 import math
@@ -298,7 +298,7 @@ def drawAnnotation(cyclePath=None, onsetPath=None, onsetTimeKeyword=None, onsetL
 
 	# check if ax is None and use current ax if so
 	ax = __check_axes(ax)
-	# pdb.set_trace()
+	
 	if computed is not None:
 		# plot computed annotations, valid only when ``cyclePath`` is not None
 		for ind, computedArray in enumerate(computed):
@@ -428,7 +428,7 @@ def pitchContour(audio=None, sr=16000, audioPath=None, startTime=0, duration=Non
 		audio = librosa.to_mono(audio)
 
 	if duration is None:
-		duration = librosa.get_duration(audio, sr=sr)
+		duration = librosa.get_duration(y=audio, sr=sr)
 
 	snd = parselmouth.Sound(audio, sr)
 	pitch = snd.to_pitch_ac(time_step=timeStep, pitch_floor=minPitch, very_accurate=veryAccurate, octave_jump_cost=octaveJumpCost, pitch_ceiling=maxPitch) 	# extracting pitch contour (in Hz)
@@ -445,11 +445,11 @@ def pitchContour(audio=None, sr=16000, audioPath=None, startTime=0, duration=Non
 		return (p, t)
 	else:
 		# plot the contour
-		return plotPitch(p, t, is_cents=is_cents, ax=ax, **kwargs)
+		return plotPitch(p, t, is_cents=is_cents, ax=ax, xlim=(startTime, startTime+duration), **kwargs)
 
 # Nithya: AskRohit - I have made the default values of xticks and xlabel as False and the defaults of yticks and ylabel as True.
 # PLOTTING FUNCTION
-def plotPitch(p=None, t=None, is_cents=False, notes=None, ax=None, freqXlabels=5, xticks=False, yticks=True, xlabel=False, ylabel=True, title='Pitch Contour', annotate=False, ylim=None, c='blue',**kwargs):
+def plotPitch(p=None, t=None, is_cents=False, notes=None, ax=None, freqXlabels=5, xticks=False, yticks=True, xlabel=False, ylabel=True, title='Pitch Contour', annotate=False, xlim=None, ylim=None, c='blue',**kwargs):
 	'''Plots the pitch contour
 
 	Plots the pitch contour passed in the ``p`` parameter, computed from ``pitchContour()``. 
@@ -521,6 +521,11 @@ def plotPitch(p=None, t=None, is_cents=False, notes=None, ax=None, freqXlabels=5
 		annotate	: bool
 			If True, will add tala-related/onset annotations to the plot .
 
+		xlim	: (float, float) or None
+			(min, max) limits for the x axis
+
+			If None, x limits will be directly interpreted from the data
+
 		ylim	: (float, float) or None
 			(min, max) limits for the y axis.
 			
@@ -555,7 +560,7 @@ def plotPitch(p=None, t=None, is_cents=False, notes=None, ax=None, freqXlabels=5
 	ax.plot(t, p, c=c)
 	ax.set(xlabel='Time (s)' if xlabel else '', 
 	title=title, 
-	xlim=(t[0], t[-1]), 
+	xlim=xlim if xlim is not None else (t[0], t[-1]), 
 	xticks=np.around(np.arange(math.ceil(t[0]), math.floor(t[-1]), freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
 	xticklabels=np.around(np.arange(math.ceil(t[0]), math.floor(t[-1]), freqXlabels)).astype(int) if xticks else []) 	# let the labels start from the integer values.
 
@@ -658,7 +663,7 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 	if audio is None:
 		audio, sr = librosa.load(audioPath, sr=sr, mono=True, offset=startTime, duration=duration)
 	if duration is None:
-		duration = librosa.get_duration(audio, sr=sr)
+		duration = librosa.get_duration(y=audio, sr=sr)
 	
 	if nFFT is None:
 		nFFT = int(2**np.ceil(np.log2(winSize)))     # set value of ``nFFT`` if it is None.
@@ -676,7 +681,7 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
 		return plotSpectrogram(X_dB, t, f, sr=sr, ax=ax, **kwargs)
 
 # PLOTTING FUNCTION
-def plotSpectrogram(X_dB, t, f, sr=16000, hopSize=160, cmap='Blues', ax=None, freqXlabels=5, freqYlabels=2000, xticks=False, yticks=True, xlabel=False, ylabel=True, title='Spectrogram', annotate=True, ylim=None, **kwargs): 
+def plotSpectrogram(X_dB, t, f, sr=16000, hopSize=160, cmap='Blues', ax=None, freqXlabels=5, freqYlabels=2000, xticks=False, yticks=True, xlabel=False, ylabel=True, title='Spectrogram', annotate=True, xlim=None, ylim=None, **kwargs):
 	'''Plots spectrogram
 
 	Uses ``librosa.display.specshow()`` to plot a spectrogram from a computed STFT. Annotations can be added is ``annotate`` is True.
@@ -736,6 +741,11 @@ def plotSpectrogram(X_dB, t, f, sr=16000, hopSize=160, cmap='Blues', ax=None, fr
 	annotate	: bool
 		If True, will annotate markings in either cyclePath or onsetPath with preference to cyclePath.
 
+	xlim	: (float, float) or None
+		(min, max) limits for the x axis
+
+		If None the range is interpreted from the data
+
 	ylim	: (float, float) or None
 		(min, max) limits for the y axis.
 		
@@ -757,7 +767,7 @@ def plotSpectrogram(X_dB, t, f, sr=16000, hopSize=160, cmap='Blues', ax=None, fr
 	ax.set(ylabel='Frequency (Hz)' if ylabel else '', 
 	xlabel='Time (s)' if xlabel else '', 
 	title=title,
-	xlim=(t[0], t[-1]), 
+	xlim=xlim if xlim is not None else (t[0], t[-1]), 
 	xticks=np.around(np.arange(math.ceil(t[0]), math.floor(t[-1]), freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
 	xticklabels=np.around(np.arange(math.ceil(t[0]), math.floor(t[-1]), freqXlabels)).astype(int) if xticks else [], 	# let the labels start from the integer values.
 	ylim=ylim,
@@ -805,7 +815,7 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 				- If ``audio`` is None and ``audioPath`` is not None, the entire song is loaded.
 
 		ax	: matplotlib.axes.Axes or None
-			Axes to plot waveplot in.
+			Axes to plot waveshow in.
 
 			If None, will plot the object in ``plt.gca()``
 
@@ -879,9 +889,9 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 	if audio is None:
 		audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
 	if duration is None:
-		duration = librosa.get_duration(audio, sr=sr)
+		duration = librosa.get_duration(y=audio, sr=sr)
 	
-	waveplot(audio, sr, ax=ax)
+	waveshow(y=audio, sr=sr, ax=ax, offset=startTime)
 
 	if odf:
 		plotODF(audio=audio, sr=sr, startTime=0, duration=None, ax=ax, winSize_odf=winSize_odf, hopSize_odf=hopSize_odf, nFFT_odf=nFFT_odf, source_odf=source_odf, cOdf=cOdf, ylim=True) 	# startTime=0 and duration=None because audio is already loaded.
@@ -893,8 +903,8 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
 
 	ax.set(xlabel='' if not xlabel else 'Time (s)', 
 	ylabel = '' if not ylabel else 'Amplitude',
-	xlim=(0, duration), 
-	xticks=[] if not xticks else np.around(np.arange(math.ceil(startTime) - startTime, duration, freqXlabels)),
+	xlim=(startTime, startTime+duration), 
+	xticks=[] if not xticks else np.around(np.arange(math.ceil(startTime),startTime + duration, freqXlabels)),
 	xticklabels=[] if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)).astype(int),
 	yticks=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 1), 
 	yticklabels=[] if not yticks else np.around(np.linspace(min(audio), max(audio), 3), 1), 
@@ -949,7 +959,7 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
 				- If ``audio`` is None and ``audioPath`` is not None, the entire song is loaded.
 
 		ax	: matplotlib.axes.Axes
-			Axes object to plot waveplot in.
+			Axes object to plot waveshow in.
 
 		winSize_odf    : int
 			Window size (in frames) used by the onset detection function.
@@ -1023,7 +1033,7 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
 		if audio is None:
 			audio, sr = librosa.load(audioPath, sr=sr, offset=startTime, duration=duration)
 		if duration is None:
-			duration = librosa.get_duration(audio, sr=sr)
+			duration = librosa.get_duration(y=audio, sr=sr)
 		
 		odf_vals, _ = getODF(audio=audio, audioPath=None, startTime=startTime, duration=duration, fs=sr, winSize=winSize_odf, hopSize=hopSize_odf, nFFT=nFFT_odf, source=source_odf)
 
@@ -1055,7 +1065,7 @@ def plotODF(audio=None, sr=16000, audioPath=None, odf=None, startTime=0, duratio
 		# set ax parameters only if they are not None
 		ax.set(xlabel=xlabel_ if not xlabel else 'Time (s)', 
 		ylabel = ylabel_ if not ylabel else 'ODF',
-		xlim=(0, duration), 
+		xlim=(startTime, startTime+duration),  
 		xticks=xticks_ if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)),
 		xticklabels=xticklabels_ if not xticks else np.around(np.arange(math.ceil(startTime), duration+startTime, freqXlabels)).astype(int),
 		yticks=yticks_ if not yticks else np.around(np.linspace(-max_abs_val,max_abs_val, 3), 2), #Resolved #TODO-Rohit linspace args edited from min & max(audio)
@@ -1163,7 +1173,7 @@ def playAudioWClicks(audio=None, sr=16000, audioPath=None, startTime=0, duration
 	if audio is None:
 		audio, sr = librosa.load(audioPath, sr=None, offset=startTime, duration=duration)
 	if duration is None:
-		duration = librosa.get_duration(audio)
+		duration = librosa.get_duration(y=audio, sr=sr)
 	onsetFileVals = pd.read_csv(onsetFile)
 	onsetTimes = []
 
@@ -1310,8 +1320,10 @@ def subBandEner(X,fs,band):
 			STFT of an audio signal x
 		fs  : int or float
 			Sampling rate
-		band    : list or tuple or ndarray
+		band    : list or tuple or ndarray or None
 			Edge frequencies (in Hz) of the sub-band of interest
+
+			If None, returns the full-band energy
 		
 	Returns
 	----------
@@ -1319,12 +1331,15 @@ def subBandEner(X,fs,band):
 			Array with each value representing the magnitude STFT values in a short-time frame squared & summed over the sub-band
 	'''
 
-	#convert band edge frequencies to bin numbers
-	binLow = int(np.ceil(band[0]*X.shape[0]/(fs/2)))
-	binHi = int(np.ceil(band[1]*X.shape[0]/(fs/2)))
-
-	#compute sub-band energy
-	sbe = np.sum(np.abs(X[binLow:binHi])**2, 0)
+	if band is None:
+		# calculate full-band energy if band is None
+		sbe = np.sum(np.abs(X[:])**2, 0)
+	else:
+		#convert band edge frequencies to bin numbers
+		binLow = int(np.ceil(band[0]*X.shape[0]/(fs/2)))
+		binHi = int(np.ceil(band[1]*X.shape[0]/(fs/2)))
+		#compute sub-band energy
+		sbe = np.sum(np.abs(X[binLow:binHi])**2, 0)
 
 	return sbe
 
@@ -1738,6 +1753,10 @@ def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration
 	if audio is None:
 		# if audio is not given, load audio from audioPath
 		audio, sr = librosa.load(audioPath, sr=sr, mono=True, offset=startTime, duration = duration)
+
+	if duration is None:
+		duration = librosa.get_duration(y=audio, sr=sr)
+
 	snd = parselmouth.Sound(audio, sr)
 	intensity = snd.to_intensity(time_step=timeStep, minimum_pitch=minPitch)
 	intensityVals = intensity.values[0]
@@ -1748,10 +1767,10 @@ def intensityContour(audio=None, sr=16000, audioPath=None, startTime=0, duration
 		return (intensityVals, t)
 	else:
 		# else plot the contour
-		return plotIntensity(intensityVals=intensityVals, t=t, ax=ax, startTime=startTime, duration=duration, **kwargs)
+		return plotIntensity(intensityVals=intensityVals, t=t, ax=ax, startTime=startTime, duration=duration, xlim=(startTime, startTime+duration), **kwargs)
 
 # PLOTTING FUNCTION
-def plotIntensity(intensityVals=None, t=None, ax=None, startTime=0, duration=None, freqXlabels=5, xticks=False, yticks=True, xlabel=False, ylabel=True, title='Intensity Contour', annotate=False, ylim=None, c='yellow', **kwargs):
+def plotIntensity(intensityVals=None, t=None, ax=None, startTime=0, duration=None, freqXlabels=5, xticks=False, yticks=True, xlabel=False, ylabel=True, title='Intensity Contour', annotate=False, xlim=None, ylim=None, c='yellow', **kwargs):
 	'''Function to plot a computed intensity contour from ``intensityContour()`` function. 
 
 	Parameters
@@ -1787,6 +1806,11 @@ def plotIntensity(intensityVals=None, t=None, ax=None, startTime=0, duration=Non
 
 			Send to ``drawAnnotation()``.
 
+		xlim	: (float, float) or None
+			(min, max) limits for the x axis
+
+			If None, will be directly interpreted from the data.
+
 		ylim    : (float, float) or None
 			(min, max) limits for the y axis.
 			
@@ -1814,18 +1838,191 @@ def plotIntensity(intensityVals=None, t=None, ax=None, startTime=0, duration=Non
 	# check if ax is None
 	ax = __check_axes(ax)
 	
-	ax = sns.lineplot(x=t, y=intensityVals, ax=ax, color=c);
+	ax.plot(t, intensityVals, c=c)
 	ax.set(xlabel='Time (s)' if xlabel else '', 
 	ylabel='Intensity (dB)' if ylabel else '', 
 	title=title, 
-	xlim=(startTime, duration+startTime), 
-	xticks=np.around(np.arange(math.ceil(startTime), math.floor(startTime+duration), freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
-	xticklabels=np.around(np.arange(math.ceil(startTime), math.floor(startTime+duration), freqXlabels)).astype(int) if xticks else [], 	# let the labels start from the integer values.
+	xlim=xlim if xlim is not None else (t[0], t[-1]), 
+	xticks=np.around(np.arange(math.ceil(t[0]), math.floor(t[-1]), freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
+	xticklabels=np.around(np.arange(math.ceil(t[0]), math.floor(t[-1]), freqXlabels)).astype(int) if xticks else [], 	# let the labels start from the integer values.
 	ylim=ylim if ylim is not None else ax.get_ylim())
 	if not yticks:
 		ax.set(yticklabels=[])
 	if annotate:
-		ax = drawAnnotation(startTime=startTime, duration=duration, ax=ax, **kwargs)
+		ax = drawAnnotation(startTime=t[0], duration=t[-1]-t[0], ax=ax, **kwargs)
+	return ax
+
+def energyContour(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, winSize=640, hopSize=160, timeStep=None, nFFT=1024, subBand=[600, 2400], ax=None, **kwargs):
+	'''
+	Generates a full-band or sub-band energy contour.
+
+	If ``ax`` is None, this function returns a plot of the energy contour, else returns (energy, time) values.
+
+	Parameters
+	----------
+		audio	: ndarray or None
+			Loaded audio time series
+
+		sr	: number > 0; default=16000
+			If audio is not None, defines sample rate of audio time series 
+
+			If audio is None and audioPath is not None, defines sample rate to load the audio at
+
+		audioPath	: str, int, pathlib.Path, file-like object or None
+        	Path to the input file.
+
+			Used only if audio is None. Audio is loaded as mono.
+
+			Sent to ``librosa.load()`` as ``path`` parameter.
+
+			If None, ``audio`` cannot be None.
+
+		startTime    : float; default=0
+			Time stamp to consider audio from
+
+		duration    : float or None; default=None
+			If duration is None
+				- If ``audio`` is None, duration is inferred from the audio.
+				- If ``audio`` is None and ``audioPath`` is not None, the entire song is loaded.
+
+		winSize	: int; default=640
+			Length of window (in frames) used for STFT.
+
+		hopSize	: int or None, default=160
+			Length of hop (in frames) used for STFT. 
+			
+			If None, will use the value in ``time_step``.
+
+		timeStep	: float or None
+			Length of the hop (in seconds) used for STFT. Used only if ``hopSize`` is None.
+
+		nFFT	: int; default=1024
+			DFT size (in frames)
+
+		subBand	:  list or tuple or ndarray or None
+            Edge frequencies (in Hz) of the sub-band of interest
+
+			If None, considers the full-band energy
+
+		ax    : matplotlib.axes.Axes or None
+			Axes object to plot the intensity contour in.
+
+			If None, will return a tuple with (intensity contour, time steps)
+
+		kwargs	: Additional arguements passed to ``plotEnergy()``.
+
+	Returns
+	-------
+		ax : matplotlib.axes.Axes
+			Plot of energy contour if ``ax`` was not None
+
+		(e, t)    : (ndarray, ndarray)
+			Tuple with arrays of energy values (in dB) and time stamps. Returned if ax was None.
+	'''
+
+	if audio is None:
+		# if audio is not given, load audio from audioPath
+		audio, sr = librosa.load(audioPath, sr=sr, mono=True, offset=startTime, duration = duration)
+
+	if duration is None:
+		duration = librosa.get_duration(y=audio, sr=sr)
+	if hopSize is None:
+		# if hopSize is None, use the timeStep value
+		if timeStep is None:
+			raise ValueError('Both hopSize and timeStep cannot be None')
+		else:
+			hopSize = int(timeStep*sr)
+
+	X,_ = librosa.magphase(librosa.stft(audio, win_length=winSize, hop_length=hopSize, n_fft=nFFT))
+	e = subBandEner(X, sr, subBand)
+	e = toDB(e, 100)
+
+	t = np.arange(startTime, np.around(X.shape[1]*hopSize/sr, 2), np.around(hopSize/sr, 2))
+	if ax is None:
+		return (e, t)
+	else:
+		return plotEnergy(e, t, ax=ax, xlim=(startTime, startTime+duration),**kwargs)
+
+def plotEnergy(e, t, ax=None, freqXlabels=5, annotate=False, xticks=False,  c='black', xlabel=True, ylabel=True, xlim=None, ylim=None, title='Energy Contour', **kwargs):
+	'''
+	Used to plot energy contour generated from ``energyContour()``.
+
+	Parameters
+	----------
+		e	: ndarray
+			Energy values (in dB).
+
+			Computed from ``energyContour()``
+
+		t	: ndarray or None
+			Time stamps (in seconds) corresponding to each value in ``e``.
+
+			If None, assumes time starts from 0 s with 0.01 s hops for each value in ``e``.
+
+			Computed from ``energyContour()``.
+
+		ax	: matplotlib.axes.Axes or None
+			Object on which pitch contour is to be plotted
+
+			If None, will plot in ``matplotlib.pyplot.gca()``.
+
+		freqXlabels	: int
+			Time (in seconds) after which each x ticklabel should occur
+
+		xticks	: bool
+			If True, will print x ticklabels in the plot.
+
+		xlabel	: bool
+			If True, will add label to x axis.
+
+		ylabel	: bool
+			If True, will add label to y axis.
+
+		xlim	: (float, float) or None
+			(min, max) values of the x axis
+
+			If None, will determine the x limits from the data.
+
+		ylim	: (float, float) or None
+			(min, max) values of the x axis
+
+			If None, will determine the y limits from the data.
+
+		title	: str
+			Title to add to the plot.
+
+		annotate	: bool
+			If True, will add tala-related/onset annotations to the plot .
+
+		c	: color
+			Colour of the pitch contour plotted.
+
+		kwargs	: additional arguements passed to ``drawAnnotation()`` if ``annotate`` is True.
+
+	Returns
+	-------
+		ax	: matplotlib.axes.Axes
+			Plot of pitch contour.
+	'''
+	if ax is None:
+		Exception('ax parameter has to be provided')
+
+	if t is None:
+		t = np.arange(0, len(e)*0.01, 0.01)
+
+	ax.plot(t, e, c=c)
+	ax.set(
+		xlim=xlim if xlim is not None else (t[0], t[-1]), 
+		ylim=ylim if ylim is not None else ax.get_ylim(),
+		xticks=np.around(np.arange(t[0], t[-1], freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
+		xticklabels=np.around(np.arange(t[0], t[-1], freqXlabels)).astype(int) if xticks else [], 	# let the labels start from the integer values
+		xlabel='Time (s)' if xlabel else '',
+		ylabel='dB' if ylabel else '',
+		title=title
+	)
+	
+	if annotate:
+		ax = drawAnnotation(startTime=t[0], duration=t[-1] - t[0], ax=ax, **kwargs)
 	return ax
 
 # PLOTTING FUNCTION
