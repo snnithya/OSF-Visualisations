@@ -552,7 +552,7 @@ def plotPitch(p=None, t=None, is_cents=False, notes=None, ax=None, freqXlabels=5
 	# if ax is None, use the ``plt.gca()`` to use current axes object
 	ax = __check_axes(ax)
 	
-	ax = sns.lineplot(x=t, y=p, ax=ax, color=c)
+	ax.plot(t, p, c=c)
 	ax.set(xlabel='Time (s)' if xlabel else '', 
 	title=title, 
 	xlim=(t[0], t[-1]), 
