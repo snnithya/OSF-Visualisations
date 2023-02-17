@@ -303,7 +303,6 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
     title=title,
     xlim=(0, duration), 
     xticks=(np.arange(0, duration, freqXlabels)) if xticks else [], 
-    xticklabels=(np.arange(startTime, duration+startTime, freqXlabels)) if xticks else [],xticks=np.around(np.arange(math.ceil(startTime)-startTime, duration, freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
     xticklabels=np.around(np.arange(startTime, duration+startTime, freqXlabels) ).astype(int) if xticks else [], 
     ylim=(0, 5000),
     yticks=[0, 2e3, 4e3] if yticks else [], 
