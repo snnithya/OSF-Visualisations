@@ -1,2 +1,4 @@
 pandas
 librosa
+praat-parselmouth
+ffmpeg-python
