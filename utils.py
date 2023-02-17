@@ -5,7 +5,7 @@ import numpy as np
 import librosa
 import seaborn as sns
 import scipy.signal as sig
-from librosa.display import waveshow, specshow
+from librosa.display import waveplot, specshow
 from IPython.display import Audio, Video 
 import parselmouth
 import math
@@ -302,7 +302,8 @@ def spectrogram(audio=None, sr=16000, audioPath=None, startTime=0, duration=None
     xlabel='Time (s)' if xlabel else '', 
     title=title,
     xlim=(0, duration), 
-    xticks=np.around(np.arange(math.ceil(startTime)-startTime, duration, freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
+    xticks=(np.arange(0, duration, freqXlabels)) if xticks else [], 
+    xticklabels=(np.arange(startTime, duration+startTime, freqXlabels)) if xticks else [],xticks=np.around(np.arange(math.ceil(startTime)-startTime, duration, freqXlabels)).astype(int),     # start the xticks such that each one corresponds to an integer with xticklabels
     xticklabels=np.around(np.arange(startTime, duration+startTime, freqXlabels) ).astype(int) if xticks else [], 
     ylim=(0, 5000),
     yticks=[0, 2e3, 4e3] if yticks else [], 
@@ -320,7 +321,7 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
     audioPath (str): path to the audio file
     startTime (float): time to start reading the audio at
     duration (float): duration of audio to load
-    ax (plt.Axes.axes): axis to plot waveshow in
+    ax (plt.Axes.axes): axis to plot waveplot in
     xticks (bool): if True, will plot xticklabels
     yticks (bool): if True, will plot yticklabels
     xlabel (bool): if True, will add a x label
@@ -350,7 +351,7 @@ def drawWave(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, a
         duration = math.floor(duration)  # set duration to an integer, for better readability on the x axis of the plot
         audio = audio[:int(duration*sr)]    # ensure that audio length = duration
 
-    waveshow(audio, sr, ax=ax)
+    waveplot(audio, sr, ax=ax)
     if odf:
         plotODF(audio=audio, sr=sr, startTime=0, duration=None, ax=ax, winSize_odf=winSize_odf, hopSize_odf=hopSize_odf, nFFT_odf=nFFT_odf, source_odf=source_odf, cOdf=cOdf, ylim=True)
     ax.set(xlabel='' if not xlabel else 'Time (s)', 
@@ -375,7 +376,7 @@ def plotODF(audio=None, sr=16000, audioPath=None, startTime=0, duration=None, ax
     audioPath (str): path to the audio file
     startTime (float): time to start reading the audio at
     duration (float): duration of audio to load
-    ax (plt.Axes.axes): axis to plot waveshow in
+    ax (plt.Axes.axes): axis to plot waveplot in
     winSize_odf (float): window size in seconds, fed to the onset detection function
     hopSize_odf (float): hop size in seconds, fed to the onset detection function
     nFFT_odf (int): size of DFT used in onset detection function
@@ -436,7 +437,7 @@ def plotEnergy(audio=None, sr=16000, audioPath=None, startTime=0, duration=None,
         audioPath: path to the audio file
         startTime: time to start reading the audio at
         duration: duration of audio to load
-        ax: axis to plot waveshow in
+        ax: axis to plot waveplot in
         xticks: if True, will plot xticklabels
         freqXlabels: time (in seconds) after which each x label occurs
         annotate: if True, will annotate tala markings
